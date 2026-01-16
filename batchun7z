@@ -210,8 +210,33 @@ eval "find . -maxdepth 1 -type f \\( $find_pattern \\) 2>/dev/null" | while IFS=
     mkdir -p "${TEMP_DIR}"
 
     # 步骤1：7z 解压到临时目录（输入密码，静默解压）
-    # 使用 -t* 让 7z 自动识别压缩格式，支持 .tar.gz 等复合格式
-    7z x "${archive_file}" -t* -p"${EXTRACT_PASSWORD}" -o"${TEMP_DIR}" -y >/dev/null 2>&1
+    # 对于 .tar.gz 等复合格式，需要特殊处理
+    # 构建 7z 基础参数（包含密码）
+    sevenz_base_args="x -si -ttar -o\"${TEMP_DIR}\" -y"
+    if [ -n "${EXTRACT_PASSWORD}" ]; then
+        sevenz_base_args="${sevenz_base_args} -p\"${EXTRACT_PASSWORD}\""
+    fi
+
+    case "${archive_name}" in
+        *.tar.gz|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz)
+            # 复合格式：先用 gzip/bzip2/xz 解压外层，再用 7z 解压 tar
+            case "${archive_name}" in
+                *.tar.gz|*.tgz)
+                    gunzip -c "${archive_file}" | eval "7z ${sevenz_base_args}" >/dev/null 2>&1
+                    ;;
+                *.tar.bz2|*.tbz2)
+                    bunzip2 -c "${archive_file}" | eval "7z ${sevenz_base_args}" >/dev/null 2>&1
+                    ;;
+                *.tar.xz|*.txz)
+                    xz -c -d "${archive_file}" | eval "7z ${sevenz_base_args}" >/dev/null 2>&1
+                    ;;
+            esac
+            ;;
+        *)
+            # 其他格式：直接使用 7z 解压
+            7z x "${archive_file}" -p"${EXTRACT_PASSWORD}" -o"${TEMP_DIR}" -y >/dev/null 2>&1
+            ;;
+    esac
 
     # 校验 7z 解压是否成功
     if [ ${?} -ne 0 ]; then

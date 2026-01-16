@@ -189,22 +189,47 @@ foreach ($xzFile in $archiveFiles) {
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
     # 步骤1：7z 解压到临时目录
-    # 使用 -t* 让 7z 自动识别压缩格式，支持 .tar.gz 等复合格式
-    $7zArgs = @(
-        "x",
-        "-t*",
-        $xzFile.FullName,
-        "-o${tempDir}",
-        "-y"
-    )
+    # 对于 .tar.gz 等复合格式，需要特殊处理
+    $archiveName = $xzFile.Name
 
-    # 如果设置了密码，添加密码参数
+    # 构建 7z 基础参数（包含密码）
+    $tarArgs = @("x", "-si", "-ttar", "-o${tempDir}", "-y")
     if (-not [string]::IsNullOrEmpty($EXTRACT_PASSWORD)) {
-        $7zArgs += "-p${EXTRACT_PASSWORD}"
+        $tarArgs += "-p${EXTRACT_PASSWORD}"
     }
 
-    # 执行解压命令（静默模式）
-    $process = Start-Process -FilePath $7zPath -ArgumentList $7zArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$null" -RedirectStandardError "$null"
+    if ($archiveName -match '\.tar\.gz$|\.tgz$') {
+        # .tar.gz / .tgz：使用 gzip 解压外层，再用 7z 解压 tar
+        $gzipOutput = gzip -d -c $xzFile.FullName 2>&1
+        $gzipOutput | & $7zPath @tarArgs 2>&1 | Out-Null
+    } elseif ($archiveName -match '\.tar\.bz2$|\.tbz2$') {
+        # .tar.bz2 / .tbz2：使用 bzip2 解压外层，再用 7z 解压 tar
+        $bzip2Output = bunzip2 -c $xzFile.FullName 2>&1
+        $bzip2Output | & $7zPath @tarArgs 2>&1 | Out-Null
+    } elseif ($archiveName -match '\.tar\.xz$|\.txz$') {
+        # .tar.xz / .txz：使用 xz 解压外层，再用 7z 解压 tar
+        $xzOutput = xz -d -c $xzFile.FullName 2>&1
+        $xzOutput | & $7zPath @tarArgs 2>&1 | Out-Null
+    } else {
+        # 其他格式：直接使用 7z 解压
+        $7zArgs = @("x", $xzFile.FullName, "-o${tempDir}", "-y")
+
+        # 如果设置了密码，添加密码参数
+        if (-not [string]::IsNullOrEmpty($EXTRACT_PASSWORD)) {
+            $7zArgs += "-p${EXTRACT_PASSWORD}"
+        }
+
+        # 执行解压命令（静默模式）
+        $process = Start-Process -FilePath $7zPath -ArgumentList $7zArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$null" -RedirectStandardError "$null"
+        $exitCode = $process.ExitCode
+    }
+
+    # 对于复合格式，检查解压结果
+    if ($archiveName -match '\.tar\.gz$|\.tgz$|\.tar\.bz2$|\.tbz2$|\.tar\.xz$|\.txz$') {
+        # 检查临时目录是否有内容
+        $extractedItems = Get-ChildItem -Path $tempDir -Recurse
+        $exitCode = if ($extractedItems.Count -eq 0) { 1 } else { 0 }
+    }
 
     # 校验解压结果
     if ($process.ExitCode -ne 0) {
