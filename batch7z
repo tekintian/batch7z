@@ -44,7 +44,7 @@
 # 定义默认配置（无改动，保留原功能）
 DEFAULT_PASSWORD=""
 DEFAULT_DIR="$(pwd)"
-FILTER_FILES=("*.log" "*.tmp" ".DS_Store" "node_modules/" ".next/")
+FILTER_FILES=("*.log" "*.tmp" ".DS_Store" "node_modules/" ".next/" "__MACOSX/" "Thumbs.db")
 # 定义已压缩的文件格式（不需要再次打包的压缩文件）
 CUR_PACKED_FORMATS=("*.7z" "*.rar" "*.gz" "*.xz" "*.zip" "*.tar" "*.tgz" "*.bz2" "*.iso" "*.dmg")
 
