@@ -1,16 +1,33 @@
-# Batch7z 批量压缩/解压工具
+# 📦 Batch7z - Efficient Batch Compression/Extraction Tool
 
-一套用于批量压缩和解压 7z 格式文件的命令行工具，适用于 macOS 和 Linux 系统。
+> One-click backup, effortless restoration! Batch7z is a command-line tool designed for developers, making batch compression and extraction simpler and more efficient than ever.
 
-## 功能特性
+**[中文版 README](README_CN.md)**
 
-- **batch7z**: 批量压缩目标目录下的一级子目录为 .7z 压缩包
-- **batchun7z**: 批量解压 .7z 格式压缩包，支持目录层级剥离（strip）和强制覆盖
-- 高压缩比（LZMA2 算法）
-- 自动过滤不必要的文件（*.log、.DS_Store、node_modules 等）
-- 支持可选设置压缩/解压密码
+**✨ Key Features:**
+- 🚀 **Blazing Fast Compression**: Based on LZMA2 algorithm with up to 70% compression ratio, significantly saving storage space
+- 📁 **Smart Packaging**: Automatically identifies subdirectories and files, intelligently excludes already-compressed formats and temporary files
+- 🔒 **Flexible Encryption**: Supports no password or custom passwords to meet different security requirements
+- 🌍 **Cross-Platform Support**: Provides both Bash and PowerShell versions, perfectly compatible with Windows/macOS/Linux
+- 🎯 **Precise Control**: Supports directory level stripping (strip) and force overwrite, flexible for various scenarios
 
-## 系统要求
+**💡 Use Cases:**
+- Quick project backup and migration
+- Batch packaging of server deployment packages
+- Multi-version project archive management
+- One-click backup and restore of development environments
+
+## Features
+
+- **batch7z**: Batch compress first-level subdirectories under the target directory into .7z archives
+- **batchun7z**: Batch extract .7z format archives, supports directory level stripping (strip) and force overwrite
+- High compression ratio (LZMA2 algorithm)
+- Automatically filters unnecessary files (*.log, .DS_Store, node_modules, etc.)
+- Supports optional password setting for compression/extraction
+
+## 📋 System Requirements
+
+### macOS/Linux (Bash Version)
 
 **macOS:**
 ```bash
@@ -26,120 +43,258 @@ sudo apt-get install p7zip-full
 sudo pacman -S p7zip
 ```
 
-## 使用说明
+### Windows/macOS/Linux (PowerShell Version)
 
-### batch7z - 批量压缩
+**Windows:**
+- Download and install 7-Zip: https://www.7-zip.org/
 
-将目标目录下的一级子目录批量压缩为 .7z 包。
-
-**基本用法：**
+**macOS:**
 ```bash
-batch7z                          # 压缩当前目录所有子目录
-batch7z -d /path/to/dir          # 压缩指定目录
-batch7z -p 123456                # 使用自定义密码
-batch7z -h                       # 显示帮助信息
+brew install p7zip
+pwsh  # Install PowerShell
 ```
 
-**使用示例：**
+**Linux:**
+```bash
+# Install p7zip
+sudo apt-get install p7zip-full  # Debian/Ubuntu
+sudo pacman -S p7zip            # Arch Linux
 
-1. 备份当前项目的所有子目录：
+# Install PowerShell
+# Refer to official documentation: https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell
+```
+
+📖 **Detailed Guide**: See [PowerShell Version Usage Guide](POWERSELL_USAGE.md)
+
+## ⚡ Quick Start
+
+### Bash Version (macOS/Linux)
+
+```bash
+# Clone or download scripts
+git clone <repository-url>
+cd batch7z
+
+# Install dependencies
+brew install p7zip  # macOS
+# or
+sudo apt-get install p7zip-full  # Linux
+
+# Add execute permissions
+chmod +x batch7z batchun7z
+
+# Start using
+./batch7z -d /path/to/project
+./batchun7z -d /path/to/restore
+```
+
+### PowerShell Version (Windows/macOS/Linux)
+
+```powershell
+# Windows
+# Download and install 7-Zip: https://www.7-zip.org/
+.\batch7z.ps1 -d "C:\path\to\project"
+.\batchun7z.ps1 -d "C:\path\to\restore"
+
+# macOS/Linux
+# Install p7zip and PowerShell
+brew install p7zip pwsh
+
+# Run scripts
+pwsh -File ./batch7z.ps1 -d "/path/to/project"
+pwsh -File ./batchun7z.ps1 -d "/path/to/restore"
+```
+
+---
+
+## 📖 Usage
+
+### batch7z - Batch Compression
+
+Batch compress first-level subdirectories under the target directory into .7z archives.
+
+**Basic Usage:**
+```bash
+batch7z                          # Compress all subdirectories in current directory
+batch7z -d /path/to/dir          # Compress specified directory
+batch7z -p 123456                # Use custom password
+batch7z -h                       # Show help information
+```
+
+**Usage Examples:**
+
+1. Backup all subdirectories of current project:
 ```bash
 cd /Volumes/work/wwwroot
 batch7z
 ```
 
-2. 压缩指定目录并设置密码：
+2. Compress specified directory and set password:
 ```bash
 batch7z -d ~/Desktop/projects -p mypassword
 ```
 
-3. 压缩多个部署包，方便传输：
+3. Compress multiple deployment packages for easy transfer:
 ```bash
 cd /var/www/vhosts
 batch7z -p deploy2026
 ```
 
-**配置说明：**
-- 压缩格式：.7z（兼容 WinRAR、BetterZip 等）
-- 压缩算法：LZMA2 (xz)
-- 自动过滤：`*.log`、`*.tmp`、`.DS_Store`、`node_modules/`、`.next/`
-- 文件命名：`子目录名_YYYY-MM-DD_HH-MM.7z`
-- 默认密码：不设置密码（可选设置）
+**Configuration Notes:**
+- Compression format: .7z (compatible with WinRAR, BetterZip, 7-Zip, etc.)
+- Compression algorithm: LZMA2 (xz)
+- Auto-filter: `*.log`, `*.tmp`, `.DS_Store`, `node_modules/`, `.next/`
+- Already compressed formats (not packaged): .7z, .rar, .gz, .zip, .tar, .iso, .dmg, etc.
+- File naming:
+  - Subdirectories: `subdirectory_name_YYYY-MM-DD_HH-MM.7z`
+  - Files: `current_directory_name_files_YYYY-MM-DD_HH-MM.7z`
+- Default password: No password (optional to set)
 
-### batchun7z - 批量解压
+---
 
-批量解压当前目录下所有 .7z 格式压缩包，支持目录剥离和强制覆盖。
+### batchun7z - Batch Extraction
 
-**基本用法：**
+Batch extract all .7z format archives in current directory, supports directory stripping and force overwrite.
+
+**Basic Usage:**
 ```bash
-batchun7z                        # 解压当前目录所有压缩包
-batchun7z -d /path/to/dir        # 解压到指定目录
-batchun7z -p 123456              # 使用自定义密码
-batchun7z -s 2                   # 剥解前 2 层目录
-batchun7z -f                     # 强制覆盖已存在文件
-batchun7z -h                     # 显示帮助信息
+batchun7z                        # Extract all archives in current directory
+batchun7z -d /path/to/dir        # Extract to specified directory
+batchun7z -p 123456              # Use custom password
+batchun7z -s 2                   # Strip first 2 directory levels
+batchun7z -f                     # Force overwrite existing files
+batchun7z -h                     # Show help information
 ```
 
-**使用示例：**
+**Usage Examples:**
 
-1. 还原当前目录的所有备份包：
+1. Restore all backup packages in current directory:
 ```bash
 cd /Volumes/work/wwwroot
 batchun7z
 ```
 
-2. 解压到指定目录并设置密码：
+2. Extract to specified directory and set password:
 ```bash
 batchun7z -d ~/Desktop/restore -p mypassword
 ```
 
-3. 剥离嵌套目录结构：
+3. Strip nested directory structure:
 ```bash
-# 压缩包内：a/b/c/app/index.js
-# 使用 -s 2 后：app/index.js
+# Archive contents: a/b/c/app/index.js
+# After using -s 2: app/index.js
 batchun7z -s 2
 ```
 
-4. 强制覆盖更新（跳过已存在文件）：
+4. Force overwrite updates (skip existing files):
 ```bash
 batchun7z -f
 ```
 
-**配置说明：**
-- 支持格式：.7z（仅支持 batch7z 生成的压缩包）
-- strip 功能：剥离压缩包内文件的前 N 层目录
-- 默认行为：跳过已存在文件，不剥离目录
-- 默认密码：不设置密码（可选设置）
+**Configuration Notes:**
+- Supported formats: .7z (only archives generated by batch7z)
+- Strip feature: Strip first N directory levels of files in the archive
+- Default behavior: Skip existing files, no directory stripping
+- Default password: No password (optional to set)
 
-## 工作流程
+---
 
-### 压缩流程（batch7z）
-1. 扫描目标目录下的一级子目录
-2. 为每个子目录创建独立的 .7z 压缩包
-3. 应用文件过滤规则（排除日志、临时文件等）
-4. 使用 LZMA2 算法进行高比率压缩
-5. 可选为压缩包设置密码保护
-6. 生成带时间戳的文件名
+## 🔄 Workflow
 
-### 解压流程（batchun7z）
-1. 扫描当前目录下的所有 .7z 文件
-2. 验证密码并解压到临时目录
-3. 根据 strip 设置剥离指定层级的目录
-4. 根据覆盖设置处理已存在文件
-5. 清理临时目录，完成解压
+### Compression Process (batch7z)
+1. Scan first-level subdirectories under target directory
+2. Create independent .7z archive for each subdirectory
+3. Apply file filtering rules (exclude logs, temporary files, etc.)
+4. Use LZMA2 algorithm for high-ratio compression
+5. Optionally set password protection for archives
+6. Generate filenames with timestamps
+7. Package non-compressed files in current directory (exclude already compressed formats)
 
-## 注意事项
+### Extraction Process (batchun7z)
+1. Scan all .7z files in current directory
+2. Verify password and extract to temporary directory
+3. Strip specified directory levels based on strip setting
+4. Handle existing files based on overwrite setting
+5. Clean up temporary directory, complete extraction
 
-- 确保 7z 命令已正确安装并添加到 PATH
-- 批量操作前建议先测试小批量数据
-- 密码包含特殊字符时请使用引号包裹
-- strip 功能会修改目录结构，请谨慎使用
-- 默认不设置密码，如需加密请使用 -p 参数
+## ⚠️ Important Notes
 
-## 许可证
+- Ensure 7z command is properly installed and added to PATH
+- Recommend testing with small batch of data before large-scale operations
+- Use quotes when password contains special characters
+- Strip feature modifies directory structure, use with caution
+- Default no password, use -p parameter if encryption is needed
+- Current directory file packaging automatically excludes already compressed formats
 
-本项目工具仅供个人使用。
+## 📁 File List
 
-## 贡献
+| File | Platform | Description |
+|------|----------|-------------|
+| `batch7z` | macOS/Linux | Bash version batch compression tool |
+| `batchun7z` | macOS/Linux | Bash version batch extraction tool |
+| `batch7z.ps1` | Windows/macOS/Linux | PowerShell version batch compression tool |
+| `batchun7z.ps1` | Windows/macOS/Linux | PowerShell version batch extraction tool |
+| `README.md` | - | Project documentation |
+| `README_CN.md` | - | Chinese version project documentation |
+| `POWERSELL_USAGE.md` | - | PowerShell version detailed usage guide |
 
-欢迎提交问题和改进建议。
+## 🆚 Version Comparison
+
+| Feature | Bash Version | PowerShell Version |
+|---------|--------------|---------------------|
+| Runtime Environment | macOS/Linux | Windows / macOS / Linux |
+| Command Format | `./batch7z` | `.\batch7z.ps1` or `pwsh -File ./batch7z.ps1` |
+| Feature Set | Identical | Identical |
+| Configuration Parameters | Identical | Identical |
+| Cross-Platform | Unix systems only | All platforms |
+| Recommended Use Cases | macOS/Linux development environments | Windows development environments or cross-platform needs |
+
+## 📊 Typical Use Cases
+
+### Scenario 1: Quick Project Backup
+```bash
+# Backup entire project directory (including all subdirectories and files)
+cd ~/projects/myproject
+./batch7z -p "backup2026"
+
+# Generates:
+# - app_2026-01-16_14-30.7z
+# - lib_2026-01-16_14-30.7z
+# - myproject_files_2026-01-16_14-30.7z (contains README.md, package.json, etc.)
+```
+
+### Scenario 2: Batch Packaging for Server Deployment
+```bash
+cd /var/www/vhosts
+./batch7z -p "deploy2026"
+
+# Each site is independently packaged for easy distribution to different servers
+```
+
+### Scenario 3: Cross-Platform Data Migration
+```bash
+# Package on macOS
+./batch7z -d ~/Documents/projects -p "migrate"
+
+# Extract on Windows
+.\batchun7z.ps1 -d "C:\Projects\Restore" -p "migrate"
+```
+
+### Scenario 4: Strip Nested Directory Structure
+```bash
+# Archive contents: project/src/2025/backup/app/index.js
+# After using -s 3: app/index.js
+./batchun7z -s 3
+```
+
+## 🤝 Contributing
+
+Issues and improvement suggestions are welcome!
+
+## 📄 License
+
+This project's tools are for personal use only.
+
+---
+
+**[中文版 README](README_CN.md)**
