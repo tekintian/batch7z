@@ -2,10 +2,15 @@
 #
 # 批量压缩工具（配套 batchun7z 解压工具）
 # ===================== 使用说明 =====================
-# 用途：将目标目录下的一级子目录批量压缩为 .7z 包
+# 用途：
+#   1. 将目标目录下的一级子目录批量压缩为 .7z 包
+#   2. 将当前目录下的非压缩包文件打包为 _files_ 日期格式的 .7z 包
+# 注意事项：
+#   1. 子目录过滤：${FILTER_FILES[*]}
+#   2. 当前目录已压缩格式（不再打包）：${CUR_PACKED_FORMATS[*]}
 #
 # 基本用法：
-#   batch7z                          # 压缩当前目录所有子目录
+#   batch7z                          # 压缩当前目录所有子目录和文件
 #   batch7z -d /path/to/dir          # 压缩指定目录
 #   batch7z -p 123456                # 设置压缩包密码
 #   batch7z -h                       # 显示帮助信息
@@ -26,7 +31,10 @@
 # - 压缩格式：.7z（高压缩比，兼容 WinRAR、BetterZip 等）
 # - 压缩算法：LZMA2 (xz)
 # - 自动过滤：*.log .DS_Store node_modules
-# - 文件命名：子目录名_YYYY-MM-DD_HH-MM.7z
+# - 当前目录已压缩格式（不再打包）：*.7z *.rar *.gz *.xz *.zip *.tar *.tgz *.bz2 *.iso *.dmg
+# - 文件命名：
+#   * 子目录：子目录名_YYYY-MM-DD_HH-MM.7z
+#   * 文件：当前目录名_files_YYYY-MM-DD_HH-MM.7z
 # - 默认密码：不设置密码
 #
 # ===================== 系统要求 =====================
@@ -37,11 +45,15 @@
 DEFAULT_PASSWORD=""
 DEFAULT_DIR="$(pwd)"
 FILTER_FILES=("*.log" "*.tmp" ".DS_Store" "node_modules/" ".next/")
+# 定义已压缩的文件格式（不需要再次打包的压缩文件）
+CUR_PACKED_FORMATS=("*.7z" "*.rar" "*.gz" "*.xz" "*.zip" "*.tar" "*.tgz" "*.bz2" "*.iso" "*.dmg")
 
 # 定义 help 帮助信息函数（无改动）
 show_help() {
     echo "===== batch7z 批量压缩工具 使用帮助 ====="
-    echo "用途：批量压缩目标目录下的一级子目录为 .7z 包（采用 xz 压缩算法）"
+    echo "用途："
+    echo "  1. 批量压缩目标目录下的一级子目录为 .7z 包（采用 xz 压缩算法）"
+    echo "  2. 打包当前目录下的非压缩包文件为 _files_ 日期格式的 .7z 包"
     echo "格式：batch7z [选项]..."
     echo ""
     echo "可选短选项参数："
@@ -53,8 +65,11 @@ show_help() {
     echo "  1. 压缩格式：.7z（兼容 BetterZip、WinRAR 等常规压缩软件）"
     echo "  2. 压缩算法：xz（LZMA2），高压缩比"
     echo "  3. 自动过滤：${FILTER_FILES[*]}"
-    echo "  4. 文件名格式：子目录名_YYYY-MM-DDTHH-MM.7z"
-    echo "  5. 系统需要先安装：brew install p7zip（macOS 全局推荐）"
+    echo "  4. 当前目录已压缩格式（不再打包）：${CUR_PACKED_FORMATS[*]}"
+    echo "  5. 文件名格式："
+    echo "     - 子目录：子目录名_YYYY-MM-DDTHH-MM.7z"
+    echo "     - 文件：当前目录名_files_YYYY-MM-DDTHH-MM.7z"
+    echo "  6. 系统需要先安装：brew install p7zip（macOS 全局推荐）"
     echo "=========================================="
 }
 
@@ -119,7 +134,7 @@ else
     echo "压缩配置：每个子目录单独打包，密码=已设置（隐藏显示）"
 fi
 echo "压缩格式：.7z（采用 xz 压缩算法，兼容常规压缩软件）"
-echo "过滤文件：${FILTER_FILES[*]}"
+echo "子目录过滤：${FILTER_FILES[*]}"
 echo "日期标识：${CURRENT_DATE}（格式：年-月-日T时-分钟）"
 echo "-----------------------------"
 
@@ -140,12 +155,22 @@ find . -maxdepth 1 -type d -not -name . -print0 | while IFS= read -r -d '' dir; 
     echo "正在压缩：${dir_name} → ${compress_file}（过滤 ${FILTER_FILES[*]}）"
 
     # 核心：7z基础命令（无数组，直接写固定参数）
-    7z a \
-        -t7z \
-        -mx=9 -p"${COMPRESS_PASSWORD}" \
-        -m0=LZMA2 \
-        "${compress_file}" "${dir_name}" \
-        $(for filter in "${FILTER_FILES[@]}"; do echo "-xr!${filter}"; done)
+    # 根据是否设置密码决定是否使用 -p 参数
+    if [ -z "${COMPRESS_PASSWORD}" ]; then
+        7z a \
+            -t7z \
+            -mx=9 \
+            -m0=LZMA2 \
+            "${compress_file}" "${dir_name}" \
+            $(for filter in "${FILTER_FILES[@]}"; do echo "-xr!${filter}"; done)
+    else
+        7z a \
+            -t7z \
+            -mx=9 -p"${COMPRESS_PASSWORD}" \
+            -m0=LZMA2 \
+            "${compress_file}" "${dir_name}" \
+            $(for filter in "${FILTER_FILES[@]}"; do echo "-xr!${filter}"; done)
+    fi
 
     # 校验压缩结果并清理无效文件
     if [ ${?} -eq 0 ]; then
@@ -160,11 +185,77 @@ find . -maxdepth 1 -type d -not -name . -print0 | while IFS= read -r -d '' dir; 
     fi
 done
 
+# 新增功能：压缩当前目录下非压缩包文件（一级子目录外的文件）
+echo "-----------------------------"
+echo "开始检查并打包当前目录文件（排除已压缩格式）..."
+
+# 获取当前目录名（作为压缩包前缀）
+current_dir_name=$(basename "$(pwd)")
+
+# 定义文件包文件名
+files_package="${current_dir_name}_files_${CURRENT_DATE}.7z"
+
+# 跳过已存在的文件包
+if [ -f "${files_package}" ]; then
+    echo "⚠️  已存在文件包 ${files_package}，跳过压缩"
+else
+    # 构建排除已压缩文件格式的 find 参数
+    exclude_args=""
+    for format in "${CUR_PACKED_FORMATS[@]}"; do
+        exclude_args="${exclude_args} ! -name \"${format}\""
+    done
+
+    # 查找当前目录下的一级文件（排除目录、排除已压缩的文件格式）
+    file_count=$(eval "find . -maxdepth 1 -type f ${exclude_args} 2>/dev/null" | wc -l | tr -d ' ')
+
+    if [ "${file_count}" -gt 0 ]; then
+        echo "发现 ${file_count} 个文件待打包（排除已压缩格式：${CUR_PACKED_FORMATS[*]}）..."
+        echo "正在打包文件：${files_package}"
+
+        # 构建过滤参数
+        filter_params=$(for filter in "${FILTER_FILES[@]}"; do echo -n " -xr!${filter}"; done)
+
+        # 根据是否设置密码决定是否使用 -p 参数
+        if [ -z "${COMPRESS_PASSWORD}" ]; then
+            # 直接使用 find 的输出传递给 7z，不经过 eval 和 sort
+            eval "find . -maxdepth 1 -type f ${exclude_args} 2>/dev/null" | while IFS= read -r file; do
+                if [ -n "${file}" ]; then
+                    7z a -t7z -mx=9 -m0=LZMA2 "${files_package}" ${filter_params} "${file}"
+                fi
+            done
+
+            # 校验压缩结果
+            if [ -f "${files_package}" ]; then
+                echo "✅ ${files_package} 压缩成功（无密码）"
+            else
+                echo "❌ ${files_package} 压缩失败，请检查文件权限或工具完整性"
+            fi
+        else
+            # 直接使用 find 的输出传递给 7z，不经过 eval 和 sort
+            eval "find . -maxdepth 1 -type f ${exclude_args} 2>/dev/null" | while IFS= read -r file; do
+                if [ -n "${file}" ]; then
+                    7z a -t7z -mx=9 -p"${COMPRESS_PASSWORD}" -m0=LZMA2 "${files_package}" ${filter_params} "${file}"
+                fi
+            done
+
+            # 校验压缩结果
+            if [ -f "${files_package}" ]; then
+                echo "✅ ${files_package} 压缩成功（密码：已设置，隐藏显示）"
+            else
+                echo "❌ ${files_package} 压缩失败，请检查文件权限或工具完整性"
+                [ -f "${files_package}" ] && rm -f "${files_package}"
+            fi
+        fi
+    else
+        echo "当前目录下没有需要打包的文件（已排除压缩格式：${CUR_PACKED_FORMATS[*]}）"
+    fi
+fi
+
 # 任务结束统计（保留原功能，全局兼容）
 echo "-----------------------------"
 echo "📊 本次任务生成压缩包统计："
 total_count=$(ls -l ./*_"${CURRENT_DATE}".7z 2>/dev/null | wc -l)
-total_size=$(du -sb ./*_"${CURRENT_DATE}".7z 2>/dev/null | awk '{sum+=$1} END {print sum}' | numfmt --to=iec)
+total_size=$(du -sb ./*_"${CURRENT_DATE}".7z 2>/dev/null | awk '{sum+=$1} END {print sum}' | numfmt --to=iec 2>/dev/null || echo "0B")
 echo "  总数量：${total_count} 个"
 echo "  总大小：${total_size}（人性化显示）"
 echo "-----------------------------"
