@@ -210,7 +210,8 @@ eval "find . -maxdepth 1 -type f \\( $find_pattern \\) 2>/dev/null" | while IFS=
     mkdir -p "${TEMP_DIR}"
 
     # 步骤1：7z 解压到临时目录（输入密码，静默解压）
-    7z x "${archive_file}" -p"${EXTRACT_PASSWORD}" -o"${TEMP_DIR}" -y >/dev/null 2>&1
+    # 使用 -t* 让 7z 自动识别压缩格式，支持 .tar.gz 等复合格式
+    7z x "${archive_file}" -t* -p"${EXTRACT_PASSWORD}" -o"${TEMP_DIR}" -y >/dev/null 2>&1
 
     # 校验 7z 解压是否成功
     if [ ${?} -ne 0 ]; then

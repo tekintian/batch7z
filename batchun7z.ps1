@@ -189,8 +189,10 @@ foreach ($xzFile in $archiveFiles) {
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
     # 步骤1：7z 解压到临时目录
+    # 使用 -t* 让 7z 自动识别压缩格式，支持 .tar.gz 等复合格式
     $7zArgs = @(
         "x",
+        "-t*",
         $xzFile.FullName,
         "-o${tempDir}",
         "-y"
