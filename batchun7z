@@ -32,7 +32,7 @@
 # - 支持格式：.7z（仅支持 batch7z 生成的压缩包）
 # - strip 功能：剥离压缩包内文件的前 N 层目录
 # - 默认行为：跳过已存在文件，不剥离目录
-# - 默认密码：123456
+# - 默认密码：不设置密码
 #
 # ===================== 系统要求 =====================
 # 需先安装 p7zip：brew install p7zip （macOS）
@@ -40,7 +40,7 @@
 # ===================================================
 
 # 定义默认配置
-DEFAULT_PASSWORD="123456"
+DEFAULT_PASSWORD=""
 DEFAULT_EXTRACT_DIR="$(pwd)"
 DEFAULT_STRIP_LEVEL=0  # 默认 strip 0，不剥离目录层级
 SUPPORTED_FORMAT=".7z"  # 仅支持与 batch7z 配套的 .7z 格式
@@ -54,7 +54,7 @@ show_help() {
     echo ""
     echo "可选短选项参数："
     echo "  -d [目录路径]   ：指定目标解压目录（默认：当前工作目录）"
-    echo "  -p [密码]       ：指定解压包密码（默认：${DEFAULT_PASSWORD}）"
+    echo "  -p [密码]       ：指定解压包密码（默认：不设置密码）"
     echo "  -s [数字]       ：指定目录剥离层级 strip（默认：$DEFAULT_STRIP_LEVEL，非负整数）"
     echo "  -f              ：强制覆盖已存在的文件（默认：跳过已存在）"
     echo "  -h              ：显示此帮助信息并退出"
@@ -63,7 +63,7 @@ show_help() {
     echo "  1. 支持格式：仅 .7z 格式（配套 batch7z 生成的压缩包）"
     echo "  2. strip 功能：剥离压缩包内文件的前 N 层目录（N 为 -s 指定的数字）"
     echo "     示例：strip 3 → 压缩包内 a/b/c/d/file.txt → 解压后 d/file.txt"
-    echo "  3. 默认行为：解压当前目录下所有 .7z 包，不剥离目录，密码 ${DEFAULT_PASSWORD}"
+    echo "  3. 默认行为：解压当前目录下所有 .7z 包，不剥离目录，无密码"
     echo "=========================================="
 }
 
@@ -149,7 +149,11 @@ total_7z=$(ls *.7z 2>/dev/null | wc -l | tr -d ' ')
 # 第二步：输出解压任务配置信息
 echo "===== 开始批量解压 .7z 压缩包任务 ====="
 echo "目标解压目录：$(pwd)"
-echo "解压配置：密码=${EXTRACT_PASSWORD}，strip 层级=${STRIP_LEVEL}，强制覆盖=${FORCE_OVERWRITE}"
+if [ -z "${EXTRACT_PASSWORD}" ]; then
+    echo "解压配置：无密码，strip 层级=${STRIP_LEVEL}，强制覆盖=${FORCE_OVERWRITE}"
+else
+    echo "解压配置：密码=已设置（隐藏显示），strip 层级=${STRIP_LEVEL}，强制覆盖=${FORCE_OVERWRITE}"
+fi
 echo "支持格式：${SUPPORTED_FORMAT}（仅配套 batch7z 压缩包）"
 echo "待解压文件：${total_7z} 个 .7z 包"
 echo "-----------------------------"

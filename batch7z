@@ -2,12 +2,12 @@
 #
 # 批量压缩工具（配套 batchun7z 解压工具）
 # ===================== 使用说明 =====================
-# 用途：将目标目录下的一级子目录批量压缩为带密码的 .7z 包
+# 用途：将目标目录下的一级子目录批量压缩为 .7z 包
 #
 # 基本用法：
 #   batch7z                          # 压缩当前目录所有子目录
 #   batch7z -d /path/to/dir          # 压缩指定目录
-#   batch7z -p 123456                # 使用自定义密码
+#   batch7z -p 123456                # 设置压缩包密码
 #   batch7z -h                       # 显示帮助信息
 #
 # 使用实例：
@@ -27,26 +27,26 @@
 # - 压缩算法：LZMA2 (xz)
 # - 自动过滤：*.log .DS_Store node_modules
 # - 文件命名：子目录名_YYYY-MM-DD_HH-MM.7z
-# - 默认密码：123456
+# - 默认密码：不设置密码
 #
 # ===================== 系统要求 =====================
 # 需先安装 p7zip：brew install p7zip
 # =================================================== 
 
 # 定义默认配置（无改动，保留原功能）
-DEFAULT_PASSWORD="123456"
+DEFAULT_PASSWORD=""
 DEFAULT_DIR="$(pwd)"
 FILTER_FILES=("*.log" "*.tmp" ".DS_Store" "node_modules/" ".next/")
 
 # 定义 help 帮助信息函数（无改动）
 show_help() {
     echo "===== batch7z 批量压缩工具 使用帮助 ====="
-    echo "用途：批量压缩目标目录下的一级子目录为带密码 .7z 包（采用 xz 压缩算法）"
+    echo "用途：批量压缩目标目录下的一级子目录为 .7z 包（采用 xz 压缩算法）"
     echo "格式：batch7z [选项]..."
     echo ""
     echo "可选短选项参数："
     echo "  -d [目录路径]   ：指定目标压缩目录（默认：当前工作目录）"
-    echo "  -p [密码]       ：指定压缩包密码（默认：${DEFAULT_PASSWORD}）"
+    echo "  -p [密码]       ：指定压缩包密码（默认：不设置密码）"
     echo "  -h              ：显示此帮助信息并退出"
     echo ""
     echo "配置说明："
@@ -113,7 +113,11 @@ CURRENT_DATE=$(date +"%Y-%m-%d_%H-%M")
 # 输出任务配置信息（规范变量引用，无兼容问题）
 echo "===== 开始批量压缩子目录任务 ====="
 echo "目标工作目录：$(pwd)"
-echo "压缩配置：每个子目录单独打包，密码=${COMPRESS_PASSWORD}"
+if [ -z "${COMPRESS_PASSWORD}" ]; then
+    echo "压缩配置：每个子目录单独打包，无密码"
+else
+    echo "压缩配置：每个子目录单独打包，密码=已设置（隐藏显示）"
+fi
 echo "压缩格式：.7z（采用 xz 压缩算法，兼容常规压缩软件）"
 echo "过滤文件：${FILTER_FILES[*]}"
 echo "日期标识：${CURRENT_DATE}（格式：年-月-日T时-分钟）"
@@ -145,7 +149,11 @@ find . -maxdepth 1 -type d -not -name . -print0 | while IFS= read -r -d '' dir; 
 
     # 校验压缩结果并清理无效文件
     if [ ${?} -eq 0 ]; then
-        echo "✅ ${compress_file} 压缩成功（密码：已设置，隐藏显示）"
+        if [ -z "${COMPRESS_PASSWORD}" ]; then
+            echo "✅ ${compress_file} 压缩成功（无密码）"
+        else
+            echo "✅ ${compress_file} 压缩成功（密码：已设置，隐藏显示）"
+        fi
     else
         echo "❌ ${compress_file} 压缩失败，请检查目录权限或工具完整性"
         [ -f "${compress_file}" ] && rm -f "${compress_file}"
