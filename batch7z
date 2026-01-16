@@ -224,9 +224,16 @@ else
                 fi
             done
 
-            # 校验压缩结果
+            # 校验压缩结果：检查压缩包是否有效（非空）
             if [ -f "${files_package}" ]; then
-                echo "✅ ${files_package} 压缩成功（无密码）"
+                # 检查压缩包大小，如果为 0 字节则删除
+                file_size=$(wc -c < "${files_package}" 2>/dev/null | tr -d ' ')
+                if [ "${file_size}" -eq 0 ] 2>/dev/null; then
+                    echo "⚠️  ${files_package} 压缩包为空，已删除"
+                    rm -f "${files_package}"
+                else
+                    echo "✅ ${files_package} 压缩成功（无密码，大小：$(du -h "${files_package}" | cut -f1)）"
+                fi
             else
                 echo "❌ ${files_package} 压缩失败，请检查文件权限或工具完整性"
             fi
@@ -238,9 +245,16 @@ else
                 fi
             done
 
-            # 校验压缩结果
+            # 校验压缩结果：检查压缩包是否有效（非空）
             if [ -f "${files_package}" ]; then
-                echo "✅ ${files_package} 压缩成功（密码：已设置，隐藏显示）"
+                # 检查压缩包大小，如果为 0 字节则删除
+                file_size=$(wc -c < "${files_package}" 2>/dev/null | tr -d ' ')
+                if [ "${file_size}" -eq 0 ] 2>/dev/null; then
+                    echo "⚠️  ${files_package} 压缩包为空，已删除"
+                    rm -f "${files_package}"
+                else
+                    echo "✅ ${files_package} 压缩成功（密码：已设置，隐藏显示，大小：$(du -h "${files_package}" | cut -f1)）"
+                fi
             else
                 echo "❌ ${files_package} 压缩失败，请检查文件权限或工具完整性"
                 [ -f "${files_package}" ] && rm -f "${files_package}"

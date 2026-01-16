@@ -2,14 +2,15 @@
 #
 # 批量解压工具（配套 batch7z 压缩工具）
 # ===================== 使用说明 =====================
-# 用途：批量解压当前目录下所有 .7z 格式压缩包
+# 用途：批量解压当前目录下所有支持的压缩包
 #
 # 基本用法：
-#   batchun7z                        # 解压当前目录所有压缩包
+#   batchun7z                        # 解压当前目录所有压缩包（默认格式：.7z .zip .xz .tgz .gz）
 #   batchun7z -d /path/to/dir        # 解压到指定目录
 #   batchun7z -p 123456              # 使用自定义密码
 #   batchun7z -s 2                   # 剥解前 2 层目录
 #   batchun7z -f                     # 强制覆盖已存在文件
+#   batchun7z -e "*.7z *.rar"        # 自定义解压格式
 #   batchun7z -h                     # 显示帮助信息
 #
 # 使用实例：
@@ -28,8 +29,11 @@
 #   # 场景4：强制覆盖更新（跳过已存在文件）
 #   batchun7z -f
 #
+#   # 场景5：自定义解压格式（仅解压 .7z 和 .rar）
+#   batchun7z -e "*.7z *.rar" -d /path/to/dir
+#
 # ===================== 配置说明 =====================
-# - 支持格式：.7z（仅支持 batch7z 生成的压缩包）
+# - 默认格式：.7z .zip .xz .tgz .gz（可通过 -e 参数自定义）
 # - strip 功能：剥离压缩包内文件的前 N 层目录
 # - 默认行为：跳过已存在文件，不剥离目录
 # - 默认密码：不设置密码
@@ -39,31 +43,40 @@
 # macport 安装：sudo port install p7zip
 # ===================================================
 
+# 前置校验：检查7z工具是否安装（兜底排查）
+if ! command -v 7z &> /dev/null; then
+    echo "❌ 错误：未找到7z命令，请先安装p7zip工具！"
+    echo "  macOS 全局安装：brew install p7zip"
+    exit 1
+fi
+
 # 定义默认配置
 DEFAULT_PASSWORD=""
 DEFAULT_EXTRACT_DIR="$(pwd)"
 DEFAULT_STRIP_LEVEL=0  # 默认 strip 0，不剥离目录层级
-SUPPORTED_FORMAT=".7z"  # 仅支持与 batch7z 配套的 .7z 格式
 DEFAULT_FORCE=false  # 默认不强制覆盖
+DEFAULT_FORMATS="*.7z *.zip *.xz *.tgz *.gz"  # 默认支持格式
 
 # 定义 help 帮助信息函数
 show_help() {
     echo "===== batchun7z 批量解压工具 使用帮助 ====="
-    echo "用途：批量解压 .7z 格式压缩包（配套 batch7z 压缩工具，支持 strip 目录剥离）"
+    echo "用途：批量解压压缩包（支持 strip 目录剥离，可自定义格式）"
     echo "格式：batchun7z [选项]..."
     echo ""
     echo "可选短选项参数："
     echo "  -d [目录路径]   ：指定目标解压目录（默认：当前工作目录）"
     echo "  -p [密码]       ：指定解压包密码（默认：不设置密码）"
     echo "  -s [数字]       ：指定目录剥离层级 strip（默认：$DEFAULT_STRIP_LEVEL，非负整数）"
+    echo "  -e [格式列表]   ：指定解压格式，空格分隔（默认：$DEFAULT_FORMATS）"
     echo "  -f              ：强制覆盖已存在的文件（默认：跳过已存在）"
     echo "  -h              ：显示此帮助信息并退出"
     echo ""
     echo "配置说明："
-    echo "  1. 支持格式：仅 .7z 格式（配套 batch7z 生成的压缩包）"
+    echo "  1. 支持格式：${SUPPORTED_FORMATS[*]}"
+    echo "     自定义格式：使用 -e 参数，如 -e \"*.7z *.zip *.rar\""
     echo "  2. strip 功能：剥离压缩包内文件的前 N 层目录（N 为 -s 指定的数字）"
     echo "     示例：strip 3 → 压缩包内 a/b/c/d/file.txt → 解压后 d/file.txt"
-    echo "  3. 默认行为：解压当前目录下所有 .7z 包，不剥离目录，无密码"
+    echo "  3. 默认行为：解压当前目录下所有支持的压缩包，不剥离目录，无密码"
     echo "=========================================="
 }
 
@@ -72,15 +85,17 @@ EXTRACT_DIR="${DEFAULT_EXTRACT_DIR}"
 EXTRACT_PASSWORD="${DEFAULT_PASSWORD}"
 STRIP_LEVEL="${DEFAULT_STRIP_LEVEL}"
 FORCE_OVERWRITE="${DEFAULT_FORCE}"
+SUPPORTED_FORMATS=($DEFAULT_FORMATS)
 
-# 核心：使用 getopts 解析短选项参数（-d、-p、-s、-f、-h）
-# 选项字符串 "d:p:s:fh" 说明：
+# 核心：使用 getopts 解析短选项参数（-d、-p、-s、-e、-f、-h）
+# 选项字符串 "d:p:s:e:fh" 说明：
 # d: 表示 -d 选项后必须跟参数（解压目录路径）
 # p: 表示 -p 选项后必须跟参数（解压密码）
 # s: 表示 -s 选项后必须跟参数（strip 层级，非负整数）
+# e: 表示 -e 选项后必须跟参数（解压格式列表，空格分隔）
 # f: 表示 -f 选项无后续参数，强制覆盖
 # h: 表示 -h 选项无后续参数
-while getopts "d:p:s:fh" opt; do
+while getopts "d:p:s:e:fh" opt; do
     case "${opt}" in
         d)
             # 赋值解压目录并校验有效性（若目录不存在，自动创建）
@@ -104,6 +119,10 @@ while getopts "d:p:s:fh" opt; do
                 echo "❌ 错误：-s 选项指定的 strip 层级 '${STRIP_LEVEL}' 无效，必须为非负整数！"
                 exit 1
             fi
+            ;;
+        e)
+            # 赋值解压格式列表（空格分隔）
+            SUPPORTED_FORMATS=($OPTARG)
             ;;
         f)
             # 强制覆盖模式
@@ -131,52 +150,71 @@ while getopts "d:p:s:fh" opt; do
     esac
 done
 
-# 第一步：校验当前目录（或指定目录）下是否有 .7z 压缩包
+# 第一步：校验当前目录（或指定目录）下是否有支持的压缩包
 cd "${EXTRACT_DIR}" || {
     echo "❌ 错误：无法切换到解压目录 '${EXTRACT_DIR}'，请检查权限！"
     exit 1
 }
 
-# 检查是否有 .7z 压缩包
-if ! ls *.7z 1> /dev/null 2>&1; then
-    echo "❌ 错误：在解压目录 '${EXTRACT_DIR}' 中未找到任何 .7z 格式压缩包！"
+# 构建查找匹配模式（支持所有配置的格式）
+find_pattern=""
+for fmt in "${SUPPORTED_FORMATS[@]}"; do
+    if [ -z "$find_pattern" ]; then
+        find_pattern="-name '$fmt'"
+    else
+        find_pattern="$find_pattern -o -name '$fmt'"
+    fi
+done
+
+# 检查是否有支持的压缩包
+total_files=$(eval "find . -maxdepth 1 -type f \\( $find_pattern \\) 2>/dev/null" | wc -l | tr -d ' ')
+
+if [ "${total_files}" -eq 0 ]; then
+    echo "❌ 错误：在解压目录 '${EXTRACT_DIR}' 中未找到任何支持的压缩包！"
+    echo "支持的格式：${SUPPORTED_FORMATS[*]}"
     exit 1
 fi
 
-# 统计压缩包数量
-total_7z=$(ls *.7z 2>/dev/null | wc -l | tr -d ' ')
-
 # 第二步：输出解压任务配置信息
-echo "===== 开始批量解压 .7z 压缩包任务 ====="
+echo "===== 开始批量解压压缩包任务 ====="
 echo "目标解压目录：$(pwd)"
 if [ -z "${EXTRACT_PASSWORD}" ]; then
     echo "解压配置：无密码，strip 层级=${STRIP_LEVEL}，强制覆盖=${FORCE_OVERWRITE}"
 else
     echo "解压配置：密码=已设置（隐藏显示），strip 层级=${STRIP_LEVEL}，强制覆盖=${FORCE_OVERWRITE}"
 fi
-echo "支持格式：${SUPPORTED_FORMAT}（仅配套 batch7z 压缩包）"
-echo "待解压文件：${total_7z} 个 .7z 包"
+echo "支持格式：${SUPPORTED_FORMATS[*]}"
+echo "待解压文件：${total_files} 个压缩包"
 echo "-----------------------------"
 
-# 第三步：批量解压每个 .7z 压缩包（支持 strip 目录剥离）
-for xz_file in ./*.7z; do
-    # 提取压缩包纯文件名（不含路径和后缀）
-    file_name=$(basename "${xz_file}" .7z)
-    echo "正在解压：${xz_file}"
+# 第三步：批量解压每个压缩包（支持 strip 目录剥离）
+eval "find . -maxdepth 1 -type f \\( $find_pattern \\) 2>/dev/null" | while IFS= read -r archive_file; do
+    if [ -z "${archive_file}" ]; then
+        continue
+    fi
+
+    # 提取压缩包纯文件名（含路径，不含后缀）
+    archive_name=$(basename "${archive_file}")
+    # 获取文件扩展名
+    file_ext="${archive_name##*.}"
+    # 提取不含扩展名的文件名
+    file_name="${archive_name%.*}"
+
+    echo "正在解压：${archive_name}"
 
     # 核心步骤：
     # 1. 先用 7z 解压到临时目录（保留原始目录结构）
-    # 2. 再用 rsync 实现 strip 目录剥离（核心 strip 功能）
+    # 2. 再实现 strip 目录剥离（核心 strip 功能）
     # 3. 清理临时目录，完成解压
     TEMP_DIR="./.temp_extract_${file_name}"
     mkdir -p "${TEMP_DIR}"
 
     # 步骤1：7z 解压到临时目录（输入密码，静默解压）
-    7z x "${xz_file}" -p"${EXTRACT_PASSWORD}" -o"${TEMP_DIR}" -y >/dev/null 2>&1
+    7z x "${archive_file}" -p"${EXTRACT_PASSWORD}" -o"${TEMP_DIR}" -y >/dev/null 2>&1
 
     # 校验 7z 解压是否成功
     if [ ${?} -ne 0 ]; then
-        echo "❌ ${xz_file} 解压失败（可能是密码错误、压缩包损坏或权限不足）"
+        echo "❌ ${archive_name} 解压失败（可能是密码错误、压缩包损坏或权限不足）"
         rm -rf "${TEMP_DIR}"
         continue
     fi
@@ -217,9 +255,9 @@ for xz_file in ./*.7z; do
     # 步骤3：清理临时目录
     rm -rf "${TEMP_DIR}"
 
-    echo "✅ ${xz_file} 解压成功（strip 层级：${STRIP_LEVEL}）"
+    echo "✅ ${archive_name} 解压成功（strip 层级：${STRIP_LEVEL}）"
 done
 
 echo "-----------------------------"
-echo "===== 批量解压 .7z 压缩包任务执行完毕 ====="
+echo "===== 批量解压压缩包任务执行完毕 ====="
 echo "提示：解压结果已保存到 '${EXTRACT_DIR}'，请查看验证"

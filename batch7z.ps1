@@ -259,18 +259,28 @@ if (Test-Path -Path $filesPackage -PathType Leaf) {
         # 执行压缩命令
         $process = Start-Process -FilePath $7zPath -ArgumentList $7zArgs -NoNewWindow -Wait -PassThru
 
-        # 检查压缩结果
-        if ($process.ExitCode -eq 0) {
-            if ([string]::IsNullOrEmpty($COMPRESS_PASSWORD)) {
-                Write-Host "✅ $filesPackage 压缩成功（无密码）" -ForegroundColor Green
+        # 检查压缩结果：检查压缩包是否有效（非空）
+        if (Test-Path -Path $filesPackage -PathType Leaf) {
+            # 检查压缩包大小，如果为 0 字节则删除
+            $fileSize = (Get-Item $filesPackage).Length
+            if ($fileSize -eq 0) {
+                Write-Host "⚠️  $filesPackage 压缩包为空，已删除" -ForegroundColor Yellow
+                Remove-Item -Path $filesPackage -Force
             } else {
-                Write-Host "✅ $filesPackage 压缩成功（密码：已设置，隐藏显示）" -ForegroundColor Green
+                # 格式化文件大小显示
+                $fileSizeFormatted = if ($fileSize -lt 1MB) {
+                    [math]::Round($fileSize / 1KB, 2).ToString() + " KB"
+                } else {
+                    [math]::Round($fileSize / 1MB, 2).ToString() + " MB"
+                }
+                if ([string]::IsNullOrEmpty($COMPRESS_PASSWORD)) {
+                    Write-Host "✅ $filesPackage 压缩成功（无密码，大小：$fileSizeFormatted）" -ForegroundColor Green
+                } else {
+                    Write-Host "✅ $filesPackage 压缩成功（密码：已设置，隐藏显示，大小：$fileSizeFormatted）" -ForegroundColor Green
+                }
             }
         } else {
             Write-Host "❌ $filesPackage 压缩失败，请检查文件权限或工具完整性" -ForegroundColor Red
-            if (Test-Path -Path $filesPackage -PathType Leaf) {
-                Remove-Item -Path $filesPackage -Force
-            }
         }
     } else {
         Write-Host "当前目录下没有需要打包的文件（已排除压缩格式：$($CUR_PACKED_FORMATS -join ', ')）"

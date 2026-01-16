@@ -1,13 +1,14 @@
 # BatchUn7z 批量解压工具（PowerShell 版本）
 # ===================== 使用说明 =====================
-# 用途：批量解压当前目录下所有 .7z 格式压缩包
+# 用途：批量解压当前目录下所有支持的压缩包
 #
 # 基本用法：
-#   .\batchun7z.ps1                          # 解压当前目录所有压缩包
+#   .\batchun7z.ps1                          # 解压当前目录所有压缩包（默认格式：.7z .zip .xz .tgz .gz）
 #   .\batchun7z.ps1 -d "C:\path\to\dir"     # 解压到指定目录
 #   .\batchun7z.ps1 -p "123456"             # 使用自定义密码
 #   .\batchun7z.ps1 -s 2                    # 剥解前 2 层目录
 #   .\batchun7z.ps1 -f                      # 强制覆盖已存在文件
+#   .\batchun7z.ps1 -e "*.7z *.rar"        # 自定义解压格式
 #   .\batchun7z.ps1 -h                      # 显示帮助信息
 #
 # 使用实例：
@@ -26,8 +27,11 @@
 #   # 场景4：强制覆盖更新（跳过已存在文件）
 #   .\batchun7z.ps1 -f
 #
+#   # 场景5：自定义解压格式（仅解压 .7z 和 .rar）
+#   .\batchun7z.ps1 -e "*.7z *.rar" -d "C:\path\to\dir"
+#
 # ===================== 配置说明 =====================
-# - 支持格式：.7z（仅支持 batch7z 生成的压缩包）
+# - 默认格式：.7z .zip .xz .tgz .gz（可通过 -e 参数自定义）
 # - strip 功能：剥离压缩包内文件的前 N 层目录
 # - 默认行为：跳过已存在文件，不剥离目录
 # - 默认密码：不设置密码
@@ -46,6 +50,7 @@ param(
     [string]$d = "",           # 解压目录
     [string]$p = "",           # 密码
     [int]$s = 0,               # strip 层级
+    [string]$e = "",           # 解压格式
     [switch]$f,                # 强制覆盖
     [switch]$h                 # 显示帮助
 )
@@ -58,27 +63,29 @@ $7zPath = "7z"
 $DEFAULT_PASSWORD = ""
 $DEFAULT_EXTRACT_DIR = Get-Location
 $DEFAULT_STRIP_LEVEL = 0
-$SUPPORTED_FORMAT = ".7z"
 $DEFAULT_FORCE = $false
+$DEFAULT_FORMATS = @("*.7z", "*.zip", "*.xz", "*.tgz", "*.gz")
 
 # ===================== 帮助函数 =====================
 function Show-Help {
     Write-Host "===== batchun7z 批量解压工具 使用帮助 =====" -ForegroundColor Cyan
-    Write-Host "用途：批量解压 .7z 格式压缩包（配套 batch7z 压缩工具，支持 strip 目录剥离）"
+    Write-Host "用途：批量解压压缩包（支持 strip 目录剥离，可自定义格式）"
     Write-Host "格式：.\batchun7z.ps1 [选项]..."
     Write-Host ""
     Write-Host "可选参数："
     Write-Host "  -d [目录路径]   指定目标解压目录（默认：当前工作目录）"
     Write-Host "  -p [密码]       指定解压包密码（默认：不设置密码）"
     Write-Host "  -s [数字]       指定目录剥离层级 strip（默认：0，非负整数）"
+    Write-Host "  -e [格式列表]   指定解压格式，空格分隔（默认：*.7z *.zip *.xz *.tgz *.gz）"
     Write-Host "  -f              强制覆盖已存在的文件（默认：跳过已存在）"
     Write-Host "  -h              显示此帮助信息并退出"
     Write-Host ""
     Write-Host "配置说明："
-    Write-Host "  1. 支持格式：仅 .7z 格式（配套 batch7z 生成的压缩包）"
+    Write-Host "  1. 支持格式：$($SUPPORTED_FORMATS -join ' ')"
+    Write-Host "     自定义格式：使用 -e 参数，如 -e '*.7z *.zip *.rar'"
     Write-Host "  2. strip 功能：剥离压缩包内文件的前 N 层目录（N 为 -s 指定的数字）"
     Write-Host "     示例：strip 3 → 压缩包内 a/b/c/d/file.txt → 解压后 d/file.txt"
-    Write-Host "  3. 默认行为：解压当前目录下所有 .7z 包，不剥离目录，无密码"
+    Write-Host "  3. 默认行为：解压当前目录下所有支持的压缩包，不剥离目录，无密码"
     Write-Host "  4. 系统要求："
     Write-Host "     - Windows: 安装 7-Zip (https://www.7-zip.org/)"
     Write-Host "     - macOS/Linux: 安装 p7zip (brew install p7zip)"
@@ -118,6 +125,9 @@ if ($STRIP_LEVEL -lt 0) {
     exit 1
 }
 
+# 设置解压格式
+$SUPPORTED_FORMATS = if ($e) { $e -split ' ' } else { $DEFAULT_FORMATS }
+
 # 设置强制覆盖模式
 $FORCE_OVERWRITE = $f
 
@@ -140,25 +150,33 @@ try {
 # 切换到解压目录
 Set-Location -Path $EXTRACT_DIR
 
-# 检查是否有 .7z 压缩包
-$archiveFiles = Get-ChildItem -Filter "*.7z" -File
+# 检查是否有支持的压缩包
+$archiveFiles = @()
+foreach ($format in $SUPPORTED_FORMATS) {
+    $files = Get-ChildItem -Filter $format -File
+    if ($files) {
+        $archiveFiles += $files
+    }
+}
+
 if ($archiveFiles.Count -eq 0) {
-    Write-Host "❌ 错误：在解压目录 '$EXTRACT_DIR' 中未找到任何 .7z 格式压缩包！" -ForegroundColor Red
+    Write-Host "❌ 错误：在解压目录 '$EXTRACT_DIR' 中未找到任何支持的压缩包！" -ForegroundColor Red
+    Write-Host "支持的格式：$($SUPPORTED_FORMATS -join ' ')" -ForegroundColor Yellow
     exit 1
 }
 
-$total7z = $archiveFiles.Count
+$totalFiles = $archiveFiles.Count
 
 # 输出解压任务配置信息
-Write-Host "===== 开始批量解压 .7z 压缩包任务 =====" -ForegroundColor Cyan
+Write-Host "===== 开始批量解压压缩包任务 =====" -ForegroundColor Cyan
 Write-Host "目标解压目录：$((Get-Location).Path)"
 if ([string]::IsNullOrEmpty($EXTRACT_PASSWORD)) {
     Write-Host "解压配置：无密码，strip 层级=$STRIP_LEVEL，强制覆盖=$FORCE_OVERWRITE"
 } else {
     Write-Host "解压配置：密码=已设置（隐藏显示），strip 层级=$STRIP_LEVEL，强制覆盖=$FORCE_OVERWRITE"
 }
-Write-Host "支持格式：$SUPPORTED_FORMAT（仅配套 batch7z 压缩包）"
-Write-Host "待解压文件：$total7z 个 .7z 包"
+Write-Host "支持格式：$($SUPPORTED_FORMATS -join ' ')"
+Write-Host "待解压文件：$totalFiles 个压缩包"
 Write-Host "-----------------------------" -ForegroundColor Gray
 
 # ===================== 批量解压压缩包 =====================
@@ -267,5 +285,5 @@ foreach ($xzFile in $archiveFiles) {
 }
 
 Write-Host "-----------------------------" -ForegroundColor Gray
-Write-Host "===== 批量解压 .7z 压缩包任务执行完毕 =====" -ForegroundColor Cyan
+Write-Host "===== 批量解压压缩包任务执行完毕 =====" -ForegroundColor Cyan
 Write-Host "提示：解压结果已保存到 '$EXTRACT_DIR'，请查看验证" -ForegroundColor Gray
