@@ -35,20 +35,19 @@
 # - 文件命名：
 #   * 子目录：子目录名_YYYY-MM-DD_HH-MM.7z
 #   * 文件：当前目录名_files_YYYY-MM-DD_HH-MM.7z
-# - 默认密码：不设置密码
+# - 默认无密码
 #
 # ===================== 系统要求 =====================
-# 需先安装 p7zip：brew install p7zip
+# 需先安装 p7zip：brew install p7zip（macOS）| apt install p7zip-full（Linux）
 # =================================================== 
 
-# 定义默认配置（无改动，保留原功能）
+# 定义默认配置
 DEFAULT_PASSWORD=""
 DEFAULT_DIR="$(pwd)"
 FILTER_FILES=("*.log" "*.tmp" ".DS_Store" "node_modules/" ".next/" "__MACOSX/" "Thumbs.db")
-# 定义已压缩的文件格式（不需要再次打包的压缩文件）
 CUR_PACKED_FORMATS=("*.7z" "*.rar" "*.gz" "*.xz" "*.zip" "*.tar" "*.tgz" "*.bz2" "*.iso" "*.dmg")
 
-# 定义 help 帮助信息函数（无改动）
+# 定义 help 帮助信息函数
 show_help() {
     echo "===== batch7z 批量压缩工具 使用帮助 ====="
     echo "用途："
@@ -58,7 +57,7 @@ show_help() {
     echo ""
     echo "可选短选项参数："
     echo "  -d [目录路径]   ：指定目标压缩目录（默认：当前工作目录）"
-    echo "  -p [密码]       ：指定压缩包密码（默认：不设置密码）"
+    echo "  -p [密码]       ：指定压缩包密码（默认：${DEFAULT_PASSWORD}）"
     echo "  -h              ：显示此帮助信息并退出"
     echo ""
     echo "配置说明："
@@ -67,24 +66,67 @@ show_help() {
     echo "  3. 自动过滤：${FILTER_FILES[*]}"
     echo "  4. 当前目录已压缩格式（不再打包）：${CUR_PACKED_FORMATS[*]}"
     echo "  5. 文件名格式："
-    echo "     - 子目录：子目录名_YYYY-MM-DDTHH-MM.7z"
-    echo "     - 文件：当前目录名_files_YYYY-MM-DDTHH-MM.7z"
-    echo "  6. 系统需要先安装：brew install p7zip（macOS 全局推荐）"
+    echo "     - 子目录：子目录名_YYYY-MM-DD_HH-MM.7z"
+    echo "     - 文件：当前目录名_files_YYYY-MM-DD_HH-MM.7z"
+    echo "  6. 系统需要先安装：p7zip（macOS：brew install p7zip | Linux：apt install p7zip-full）"
+    echo "  7. 进度显示：启用实时百分比进度，压缩过程中可查看执行状态"
     echo "=========================================="
 }
 
-# 前置校验：检查7z工具是否安装（无改动，兜底排查）
+# 前置校验：检查7z工具是否安装
 if ! command -v 7z &> /dev/null; then
     echo "❌ 错误：未找到7z命令，请先安装p7zip工具！"
-    echo "  macOS 全局安装：brew install p7zip"
+    echo "  macOS 安装：brew install p7zip"
+    echo "  Linux 安装：apt install p7zip-full（Debian/Ubuntu）| yum install p7zip（CentOS/RHEL）"
     exit 1
 fi
 
-# 初始化参数（默认使用默认值，无改动）
+# 封装：判断7z压缩包是否有效(非空)
+# 函数名：is_7z_archive_valid
+# 参数说明：
+#   $1：必填，7z压缩包文件路径（直接传入，忽略路径/目录额外校验）
+# 返回值（$?）：
+#   0：压缩包为空（纯空包/仅含目录/仅含隐藏无效文件）
+#   1：压缩包包含有效文件
+is_7z_archive_valid() {
+    # 步骤1：初始化变量（直接调用全局密码变量 COMPRESS_PASSWORD）
+    local archive_path="$1"
+    local valid_file_count=0
+
+    # 步骤2：构建7z命令参数数组（直接判断全局密码变量是否为空）
+    local x7z_args=(
+        "l"
+        "-bb0"
+        "-slt"
+        "${archive_path}"
+    )
+    # 直接使用全局变量，判断是否为空，非空则追加密码参数
+    if [ -n "${COMPRESS_PASSWORD}" ]; then
+        x7z_args+=("-p${COMPRESS_PASSWORD}")
+    fi
+
+    # 步骤3：核心逻辑：解析7z官方输出，统计有效文件数（保留核心过滤）
+    valid_file_count=$(
+        7z "${x7z_args[@]}" 2>/dev/null | \
+        awk '/Path = / {path=$0} /Attributes = / {attrs=$0; print path "\t" attrs}' | \
+        grep -v -E "\.DS_Store|Thumbs.db|Attributes = D_" | \
+        wc -l
+    )
+
+    # 步骤4：根据有效文件数返回对应状态码
+    if [ "${valid_file_count}" -gt 0 ]; then
+        return 1  # 有效
+    else
+        return 0  # 空包
+    fi
+}
+
+
+# 初始化参数
 TARGET_DIR="${DEFAULT_DIR}"
 COMPRESS_PASSWORD="${DEFAULT_PASSWORD}"
 
-# 核心：使用 getopts 解析短选项参数（-d、-p、-h，无改动）
+# 核心：使用 getopts 解析短选项参数（-d、-p、-h）
 while getopts "d:p:h" opt; do
     case "${opt}" in
         d)
@@ -116,16 +158,22 @@ while getopts "d:p:h" opt; do
     esac
 done
 
-# 切换到目标目录（切换失败则退出，无改动）
+# 切换到目标目录（切换失败则退出）
 cd "${TARGET_DIR}" || {
     echo "❌ 错误：无法切换到目标目录 '${TARGET_DIR}'，请检查目录权限！"
     exit 1
 }
 
-# 生成日期标识（保留原格式，全局兼容）
+# 生成日期标识（全局兼容）
 CURRENT_DATE=$(date +"%Y-%m-%d_%H-%M")
 
-# 输出任务配置信息（规范变量引用，无兼容问题）
+# 构建7z过滤参数数组（安全，避免字符串解析风险）
+xz_filter_args=()
+for filter in "${FILTER_FILES[@]}"; do
+    xz_filter_args+=(-xr!"${filter}")
+done
+
+# 输出任务配置信息
 echo "===== 开始批量压缩子目录任务 ====="
 echo "目标工作目录：$(pwd)"
 if [ -z "${COMPRESS_PASSWORD}" ]; then
@@ -135,15 +183,15 @@ else
 fi
 echo "压缩格式：.7z（采用 xz 压缩算法，兼容常规压缩软件）"
 echo "子目录过滤：${FILTER_FILES[*]}"
-echo "日期标识：${CURRENT_DATE}（格式：年-月-日T时-分钟）"
+echo "日期标识：${CURRENT_DATE}（格式：年-月-日_时-分钟）"
+echo "进度显示：启用实时百分比进度，压缩过程中可查看详细状态"
 echo "-----------------------------"
 
-# 【全局命令核心改造：放弃变量拼接，直接执行原生7z命令，无Bash高级语法】
-# 批量压缩子目录（兼容所有环境，全局调用无报错）
+# 批量压缩子目录（兼容特殊文件名，高效无冗余，带进度显示）
 find . -maxdepth 1 -type d -not -name . -print0 | while IFS= read -r -d '' dir; do
     # 提取纯子目录名称
     dir_name=$(basename "${dir}")
-    # 定义压缩包文件名（规范变量引用，避免解析错误）
+    # 定义压缩包文件名
     compress_file="${dir_name}_${CURRENT_DATE}.7z"
 
     # 跳过已存在的同名压缩包
@@ -153,45 +201,38 @@ find . -maxdepth 1 -type d -not -name . -print0 | while IFS= read -r -d '' dir; 
     fi
 
     echo "正在压缩：${dir_name} → ${compress_file}（过滤 ${FILTER_FILES[*]}）"
+    echo "-----------------------------"
 
-    # 核心：7z基础命令（无数组，直接写固定参数）
-    # 根据是否设置密码决定是否使用 -p 参数
-    if [ -z "${COMPRESS_PASSWORD}" ]; then
-        7z a \
-            -t7z \
-            -mx=9 \
-            -m0=LZMA2 \
-            "${compress_file}" "${dir_name}" \
-            $(for filter in "${FILTER_FILES[@]}"; do echo "-xr!${filter}"; done)
-    else
-        7z a \
-            -t7z \
-            -mx=9 -p"${COMPRESS_PASSWORD}" \
-            -m0=LZMA2 \
-            "${compress_file}" "${dir_name}" \
-            $(for filter in "${FILTER_FILES[@]}"; do echo "-xr!${filter}"; done)
-    fi
+    # 构建7z核心参数（添加-bsp1启用百分比进度显示）
+    xz_core_args=(-t7z -mx=9 -m0=LZMA2 "${xz_filter_args[@]}" "${compress_file}" "${dir_name}")
+    [ -n "${COMPRESS_PASSWORD}" ] && xz_core_args+=(-p"${COMPRESS_PASSWORD}")
+
+    # 一次性批量打包（移除静默输出，添加-bsp1显示实时进度，保留7z原生输出）
+    7z a -bsp1 "${xz_core_args[@]}"
 
     # 校验压缩结果并清理无效文件
     if [ ${?} -eq 0 ]; then
-        if [ -z "${COMPRESS_PASSWORD}" ]; then
-            echo "✅ ${compress_file} 压缩成功（无密码）"
-        else
-            echo "✅ ${compress_file} 压缩成功（密码：已设置，隐藏显示）"
+        # 二次校验：判断压缩包是否为空（最严谨）
+        is_7z_archive_valid "${compress_file}"
+        if [ ${?} -eq 0 ]; then
+            echo "⚠️  ${compress_file} 压缩包为空，已删除"
+            rm -f "${compress_file}"
+            continue
         fi
+        echo "✅ ${compress_file} 压缩成功（$( [ -z "${COMPRESS_PASSWORD}" ] && echo "无密码" || echo "密码：已设置，隐藏显示" )）"
     else
         echo "❌ ${compress_file} 压缩失败，请检查目录权限或工具完整性"
         [ -f "${compress_file}" ] && rm -f "${compress_file}"
     fi
+    echo "-----------------------------"
 done
 
-# 新增功能：压缩当前目录下非压缩包文件（一级子目录外的文件）
+# 压缩当前目录下非压缩包文件（无eval，高效安全，带进度显示）
 echo "-----------------------------"
 echo "开始检查并打包当前目录文件（排除已压缩格式）..."
 
 # 获取当前目录名（作为压缩包前缀）
 current_dir_name=$(basename "$(pwd)")
-
 # 定义文件包文件名
 files_package="${current_dir_name}_files_${CURRENT_DATE}.7z"
 
@@ -199,78 +240,65 @@ files_package="${current_dir_name}_files_${CURRENT_DATE}.7z"
 if [ -f "${files_package}" ]; then
     echo "⚠️  已存在文件包 ${files_package}，跳过压缩"
 else
-    # 构建排除已压缩文件格式的 find 参数
-    exclude_args=""
+    # 构建find排除参数数组（无eval，原生安全，去掉多余双引号）
+    # 默认排除  .DS_Store Thumb.db 文件
+    find_exclude_args=(! -iname ".DS_Store" ! -iname "Thumb.db")
     for format in "${CUR_PACKED_FORMATS[@]}"; do
-        exclude_args="${exclude_args} ! -name \"${format}\""
+        find_exclude_args+=(! -iname "${format}")  # 使用-iname忽略大小写，兼容性更强
     done
 
-    # 查找当前目录下的一级文件（排除目录、排除已压缩的文件格式）
-    file_count=$(eval "find . -maxdepth 1 -type f ${exclude_args} 2>/dev/null" | wc -l | tr -d ' ')
+    # 查找目标文件并读取到数组（兼容Bash 3.2+，支持特殊文件名，过滤空行）
+    target_files=()
+    if command -v mapfile &> /dev/null; then
+        # 支持mapfile的系统（Linux、Bash 4.0+）
+        mapfile -t target_files < <(find . -maxdepth 1 -type f "${find_exclude_args[@]}" 2>/dev/null)
+    else
+        # 兼容macOS（Bash 3.2）
+        while IFS= read -r file; do
+            [[ -n "${file}" ]] && target_files+=("${file}")
+        done < <(find . -maxdepth 1 -type f "${find_exclude_args[@]}" 2>/dev/null)
+    fi
+    # 过滤空元素
+    target_files=("${target_files[@]//''/}")
+    file_count=${#target_files[@]}
 
     if [ "${file_count}" -gt 0 ]; then
         echo "发现 ${file_count} 个文件待打包（排除已压缩格式：${CUR_PACKED_FORMATS[*]}）..."
         echo "正在打包文件：${files_package}"
+        echo "-----------------------------"
 
-        # 构建过滤参数
-        filter_params=$(for filter in "${FILTER_FILES[@]}"; do echo -n " -xr!${filter}"; done)
+        # 构建7z核心参数（添加-bsp1启用百分比进度显示）
+        xz_core_args=(-t7z -mx=9 -m0=LZMA2 "${xz_filter_args[@]}" "${files_package}")
+        [ -n "${COMPRESS_PASSWORD}" ] && xz_core_args+=(-p"${COMPRESS_PASSWORD}")
 
-        # 根据是否设置密码决定是否使用 -p 参数
-        if [ -z "${COMPRESS_PASSWORD}" ]; then
-            # 直接使用 find 的输出传递给 7z，不经过 eval 和 sort
-            eval "find . -maxdepth 1 -type f ${exclude_args} 2>/dev/null" | while IFS= read -r file; do
-                if [ -n "${file}" ]; then
-                    7z a -t7z -mx=9 -m0=LZMA2 "${files_package}" ${filter_params} "${file}"
-                fi
-            done
+        # 一次性批量打包（移除静默输出，添加-bsp1显示实时进度，保留7z原生输出）
+        7z a -bsp1 "${xz_core_args[@]}" "${target_files[@]}"
 
-            # 校验压缩结果：检查压缩包是否有效（非空）
-            if [ -f "${files_package}" ]; then
-                # 检查压缩包大小，如果为 0 字节则删除
-                file_size=$(wc -c < "${files_package}" 2>/dev/null | tr -d ' ')
-                if [ "${file_size}" -eq 0 ] 2>/dev/null; then
-                    echo "⚠️  ${files_package} 压缩包为空，已删除"
-                    rm -f "${files_package}"
-                else
-                    echo "✅ ${files_package} 压缩成功（无密码，大小：$(du -h "${files_package}" | cut -f1)）"
-                fi
-            else
-                echo "❌ ${files_package} 压缩失败，请检查文件权限或工具完整性"
-            fi
+        # 校验压缩结果并清理无效文件
+        is_7z_archive_valid "${files_package}"
+        is_empty=$?
+        
+        if [ -f "${files_package}" ] && [ "${is_empty}" -ne 0 ]; then
+            package_size=$(du -h "${files_package}" | cut -f1)
+            echo "✅ ${files_package} 压缩成功（$( [ -z "${COMPRESS_PASSWORD}" ] && echo "无密码" || echo "密码：已设置，隐藏显示" )，大小：${package_size}）"
         else
-            # 直接使用 find 的输出传递给 7z，不经过 eval 和 sort
-            eval "find . -maxdepth 1 -type f ${exclude_args} 2>/dev/null" | while IFS= read -r file; do
-                if [ -n "${file}" ]; then
-                    7z a -t7z -mx=9 -p"${COMPRESS_PASSWORD}" -m0=LZMA2 "${files_package}" ${filter_params} "${file}"
-                fi
-            done
-
-            # 校验压缩结果：检查压缩包是否有效（非空）
-            if [ -f "${files_package}" ]; then
-                # 检查压缩包大小，如果为 0 字节则删除
-                file_size=$(wc -c < "${files_package}" 2>/dev/null | tr -d ' ')
-                if [ "${file_size}" -eq 0 ] 2>/dev/null; then
-                    echo "⚠️  ${files_package} 压缩包为空，已删除"
-                    rm -f "${files_package}"
-                else
-                    echo "✅ ${files_package} 压缩成功（密码：已设置，隐藏显示，大小：$(du -h "${files_package}" | cut -f1)）"
-                fi
-            else
-                echo "❌ ${files_package} 压缩失败，请检查文件权限或工具完整性"
-                [ -f "${files_package}" ] && rm -f "${files_package}"
-            fi
+            echo "❌ ${files_package} 压缩失败或生成空包，已清理无效文件"
+            [ -f "${files_package}" ] && rm -f "${files_package}"
         fi
     else
         echo "当前目录下没有需要打包的文件（已排除压缩格式：${CUR_PACKED_FORMATS[*]}）"
     fi
 fi
 
-# 任务结束统计（保留原功能，全局兼容）
+# 任务结束统计（兼容特殊文件名，统计准确）
 echo "-----------------------------"
 echo "📊 本次任务生成压缩包统计："
-total_count=$(ls -l ./*_"${CURRENT_DATE}".7z 2>/dev/null | wc -l)
-total_size=$(du -sb ./*_"${CURRENT_DATE}".7z 2>/dev/null | awk '{sum+=$1} END {print sum}' | numfmt --to=iec 2>/dev/null || echo "0B")
+# 用find统计，兼容特殊文件名
+total_count=$(find . -maxdepth 1 -type f -name "*_${CURRENT_DATE}.7z" 2>/dev/null | wc -l)
+# 计算总大小并人性化显示
+total_size=$(find . -maxdepth 1 -type f -name "*_${CURRENT_DATE}.7z" -exec du -sb {} + 2>/dev/null | awk '{sum+=$1} END {print sum}')
+total_size_human=$(numfmt --to=iec --suffix=B "${total_size}" 2>/dev/null || echo "0B")
 echo "  总数量：${total_count} 个"
-echo "  总大小：${total_size}（人性化显示）"
+echo "  总大小：${total_size_human}（人性化显示）"
 echo "-----------------------------"
 echo "===== 批量压缩子目录任务执行完毕 ====="

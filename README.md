@@ -287,6 +287,11 @@ cd /var/www/vhosts
 ./batchun7z -s 3
 ```
 
+## screenshot
+
+![screenshot](docs/batch7z.jpg)
+
+
 ## 🤝 Contributing
 
 Issues and improvement suggestions are welcome!
@@ -298,3 +303,4 @@ This project's tools are for personal use only.
 ---
 
 **[中文版 README](README_CN.md)**
+

@@ -286,6 +286,11 @@ cd /var/www/vhosts
 ./batchun7z -s 3
 ```
 
+## screenshot
+
+![screenshot](docs/batch7z.jpg)
+
+
 ## 🤝 贡献
 
 欢迎提交问题和改进建议！
