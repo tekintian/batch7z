@@ -64,7 +64,7 @@ sudo pacman -S p7zip            # Arch Linux
 # Refer to official documentation: https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell
 ```
 
-📖 **Detailed Guide**: See [PowerShell Version Usage Guide](POWERSELL_USAGE.md)
+📖 **Detailed Guide**: See [PowerShell Version Usage Guide](docs/POWERSELL_USAGE.md)
 
 ## ⚡ Quick Start
 
@@ -236,7 +236,7 @@ batchun7z -f
 | `batchun7z.ps1` | Windows/macOS/Linux | PowerShell version batch extraction tool |
 | `README.md` | - | Project documentation |
 | `README_CN.md` | - | Chinese version project documentation |
-| `POWERSELL_USAGE.md` | - | PowerShell version detailed usage guide |
+| `docs/POWERSELL_USAGE.md` | - | PowerShell version detailed usage guide |
 
 ## 🆚 Version Comparison
 

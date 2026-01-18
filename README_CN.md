@@ -64,7 +64,7 @@ sudo pacman -S p7zip            # Arch Linux
 # 参考官方文档：https://docs.microsoft.com/zh-cn/powershell/scripting/install/installing-powershell
 ```
 
-📖 **详细说明**：查看 [PowerShell 版本使用说明](POWERSELL_USAGE.md)
+📖 **详细说明**：查看 [PowerShell 版本使用说明](docs/POWERSELL_USAGE.md)
 
 ## ⚡ 快速开始
 
@@ -235,7 +235,7 @@ batchun7z -f
 | `batch7z.ps1` | Windows/macOS/Linux | PowerShell 版批量压缩工具 |
 | `batchun7z.ps1` | Windows/macOS/Linux | PowerShell 版批量解压工具 |
 | `README.md` | - | 项目说明文档 |
-| `POWERSELL_USAGE.md` | - | PowerShell 版本详细使用说明 |
+| `docs/POWERSELL_USAGE.md` | - | PowerShell 版本详细使用说明 |
 
 ## 🆚 版本对比
 
