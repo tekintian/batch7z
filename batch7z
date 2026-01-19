@@ -46,6 +46,7 @@ DEFAULT_PASSWORD=""
 DEFAULT_DIR="$(pwd)"
 FILTER_FILES=("*.log" "*.tmp" ".DS_Store" "node_modules/" ".next/" "__MACOSX/" "Thumbs.db")
 CUR_PACKED_FORMATS=("*.7z" "*.rar" "*.gz" "*.xz" "*.zip" "*.tar" "*.tgz" "*.bz2" "*.iso" "*.dmg")
+TIME_FORMAT="%Y-%m-%d_%H-%M-%S"
 
 # 定义 help 帮助信息函数
 show_help() {
@@ -165,7 +166,7 @@ cd "${TARGET_DIR}" || {
 }
 
 # 生成日期标识（全局兼容）
-CURRENT_DATE=$(date +"%Y-%m-%d_%H-%M")
+CURRENT_DATE=$(date +"%Y-%m-%d_%H-%M-%S")
 
 # 构建7z过滤参数数组（安全，避免字符串解析风险）
 xz_filter_args=()
@@ -183,7 +184,7 @@ else
 fi
 echo "压缩格式：.7z（采用 xz 压缩算法，兼容常规压缩软件）"
 echo "子目录过滤：${FILTER_FILES[*]}"
-echo "日期标识：${CURRENT_DATE}（格式：年-月-日_时-分钟）"
+echo "日期标识：${CURRENT_DATE}（格式：年-月-日_时-分钟-秒）"
 echo "进度显示：启用实时百分比进度，压缩过程中可查看详细状态"
 echo "-----------------------------"
 
@@ -191,8 +192,19 @@ echo "-----------------------------"
 find . -maxdepth 1 -type d -not -name . -print0 | while IFS= read -r -d '' dir; do
     # 提取纯子目录名称
     dir_name=$(basename "${dir}")
+    
+    # 获取目录的最后修改时间并格式化
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        formatted_time=$(/usr/bin/stat -f %Sm -t "${TIME_FORMAT}" "${dir}")
+    else
+        # Linux
+        raw_time=$(stat -c '%y' "${dir}")
+        formatted_time=$(date -d "${raw_time}" +"${TIME_FORMAT}")
+    fi
+    
     # 定义压缩包文件名
-    compress_file="${dir_name}_${CURRENT_DATE}.7z"
+    compress_file="${dir_name}_${formatted_time}.7z"
 
     # 跳过已存在的同名压缩包
     if [ -f "${compress_file}" ]; then
@@ -233,8 +245,55 @@ echo "开始检查并打包当前目录文件（排除已压缩格式）..."
 
 # 获取当前目录名（作为压缩包前缀）
 current_dir_name=$(basename "$(pwd)")
+
+# 获取当前目录最新文件的最后修改时间
+# 初始化变量（避免未定义）
+latest_file_mtime=""
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # ========== macOS 环境（BSD 工具链） ==========
+    latest_file_mtime=$(find . -maxdepth 1 -type f -not -name "${CUR_PACKED_FORMATS}" -print0 2>/dev/null | \
+    xargs -0 /usr/bin/stat -f "%m %N" | \
+    sort -rn | \
+    head -n 1 | \
+    while read -r ts file; do
+      if [[ -n "$ts" && -n "$file" ]]; then
+        /usr/bin/stat -f "%Sm" -t "${TIME_FORMAT}" "$file"
+      fi
+    done)
+
+    # 兜底逻辑：无符合条件文件时，使用当前目录修改时间
+    if [[ -z "$latest_file_mtime" ]]; then
+      latest_file_mtime=$(/usr/bin/stat -f "%Sm" -t "${TIME_FORMAT}" ".")
+    fi
+
+else
+    # ========== Linux 环境（GNU 工具链） ==========
+    latest_file_mtime=$(find . -maxdepth 1 -type f -not -name "${CUR_PACKED_FORMATS}" -print0 2>/dev/null | \
+    xargs -0 stat -c "%Y %n" | \
+    sort -rn | \
+    head -n 1 | \
+    while read -r ts file; do
+      if [[ -n "$ts" && -n "$file" ]]; then
+        # GNU stat 直接格式化时间（无需 date 中转，避免时间戳限制）
+        stat -c "%y" "$file" | awk -v fmt="${TIME_FORMAT}" '{
+            split($1, d, "-"); split($2, t, ":");
+            printf "%s_%s-%s-%s\n", d[1]"-"d[2]"-"d[3], t[1], t[2], substr(t[3], 1, 2)
+        }'
+      fi
+    done)
+
+    # 兜底逻辑：无符合条件文件时，使用当前目录修改时间
+    if [[ -z "$latest_file_mtime" ]]; then
+      latest_file_mtime=$(stat -c "%y" "." | awk -v fmt="${TIME_FORMAT}" '{
+          split($1, d, "-"); split($2, t, ":");
+          printf "%s_%s-%s-%s\n", d[1]"-"d[2]"-"d[3], t[1], t[2], substr(t[3], 1, 2)
+      }')
+    fi
+fi
+
 # 定义文件包文件名
-files_package="${current_dir_name}_files_${CURRENT_DATE}.7z"
+files_package="${current_dir_name}_files_${latest_file_mtime}.7z"
 
 # 跳过已存在的文件包
 if [ -f "${files_package}" ]; then
@@ -294,9 +353,10 @@ fi
 echo "-----------------------------"
 echo "📊 本次任务生成压缩包统计："
 # 用find统计，兼容特殊文件名
-total_count=$(find . -maxdepth 1 -type f -name "*_${CURRENT_DATE}.7z" 2>/dev/null | wc -l)
+# 统计所有以当前目录名开头的7z文件，因为现在使用的是不同时间戳
+total_count=$(find . -maxdepth 1 -type f -name "*.7z" 2>/dev/null | wc -l)
 # 计算总大小并人性化显示
-total_size=$(find . -maxdepth 1 -type f -name "*_${CURRENT_DATE}.7z" -exec du -sb {} + 2>/dev/null | awk '{sum+=$1} END {print sum}')
+total_size=$(find . -maxdepth 1 -type f -name "*.7z" -exec du -sb {} + 2>/dev/null | awk '{sum+=$1} END {print sum}')
 total_size_human=$(numfmt --to=iec --suffix=B "${total_size}" 2>/dev/null || echo "0B")
 echo "  总数量：${total_count} 个"
 echo "  总大小：${total_size_human}（人性化显示）"

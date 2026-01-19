@@ -2,24 +2,24 @@
 .SYNOPSIS
 批量7z压缩工具（batch7z.ps1），与Shell版本batch7z功能对等
 .DESCRIPTION
-1. 批量压缩目标目录下的一级子目录为独立.7z包（带日期后缀）
-2. 打包目录下非压缩格式零散文件为统一_files_日期后缀.7z包
+1. 批量压缩目标目录下的一级子目录为独立.7z包（带日期后缀，使用目录最后修改时间）
+2. 打包目录下非压缩格式零散文件为统一_files_日期后缀.7z包（使用目录最后修改时间）
 3. 支持密码保护、实时进度显示、智能过滤无用文件/目录
 4. 自动校验7z环境、清理空压缩包、生成任务统计报告
 .PARAMETER TargetDir
 指定目标压缩目录（可选，默认：当前工作目录）
 .PARAMETER Password
-指定压缩包密码（可选，默认：123456）
+指定压缩包密码（可选，默认：空）
 .PARAMETER Help
 显示帮助信息（可选）
 .EXAMPLE
-.\batch7z.ps1
-# 压缩当前目录所有子目录和零散文件，使用默认密码123456
+.atch7z.ps1
+# 压缩当前目录所有子目录和零散文件，使用默认密码
 .EXAMPLE
-.\batch7z.ps1 -TargetDir "D:\Desktop\Projects" -Password "mySecurePass123"
+.atch7z.ps1 -TargetDir "D:\Desktop\Projects" -Password "mySecurePass123"
 # 压缩指定目录，使用自定义密码
 .EXAMPLE
-.\batch7z.ps1 -Help
+.atch7z.ps1 -Help
 # 显示详细帮助信息
 .NOTES
 系统要求：
@@ -32,8 +32,8 @@
 3. 自动过滤：*.log、*.tmp、.DS_Store、node_modules、.next等
 4. 已压缩格式排除：*.7z、*.rar、*.gz、*.xz、*.zip等
 5. 文件命名格式：
-   - 子目录：子目录名_YYYY-MM-DD_HH-mm.7z
-   - 零散文件：当前目录名_files_YYYY-MM-DD_HH-mm.7z
+   - 子目录：子目录名_YYYY-MM-DD_HH-mm.7z（使用目录最后修改时间）
+   - 零散文件：当前目录名_files_YYYY-MM-DD_HH-mm.7z（使用目录最后修改时间）
 #>
 
 # --------------- 脚本配置区 ---------------
@@ -62,11 +62,11 @@ function Show-Help {
     Write-Host "配置说明："
     Write-Host "  1. 压缩格式：.7z（兼容 7-Zip、WinRAR 等常规压缩软件）"
     Write-Host "  2. 压缩算法：LZMA2（高压缩比，对应 -mx=9 最高压缩级别）"
-    Write-Host "  3. 自动过滤：$($FILTER_FILES -join ' ')"
-    Write-Host "  4. 已压缩格式排除：$($CUR_PACKED_FORMATS -join ' ')"
+    Write-Host "  3. 自动过滤：$($FILTER_FILES -join ' ')
+    Write-Host "  4. 已压缩格式排除：$($CUR_PACKED_FORMATS -join ' ')
     Write-Host "  5. 文件名格式："
-    Write-Host "     - 子目录：子目录名_YYYY-MM-DD_HH-mm.7z"
-    Write-Host "     - 零散文件：当前目录名_files_YYYY-MM-DD_HH-mm.7z"
+    Write-Host "     - 子目录：子目录名_YYYY-MM-DD_HH-mm.7z（使用目录最后修改时间）"
+    Write-Host "     - 零散文件：当前目录名_files_YYYY-MM-DD_HH-mm.7z（使用目录最后修改时间）"
     Write-Host "  6. 系统要求：已安装 7-Zip 并将 7z 加入环境变量"
     Write-Host "==========================================" -ForegroundColor Cyan
 }
@@ -119,14 +119,10 @@ if (-not (Test-Path -Path $TargetDir -PathType Container)) {
 # 切换到目标目录
 try {
     Set-Location -Path $TargetDir -ErrorAction Stop
-}
-catch {
+} catch {
     Write-Host "❌ 错误：无法切换到目标目录 '$TargetDir'，请检查目录权限！" -ForegroundColor Red
     exit 1
 }
-
-# 生成日期标识（全局兼容，格式：YYYY-MM-DD_HH-mm）
-$CURRENT_DATE = Get-Date -Format "yyyy-MM-dd_HH-mm"
 
 # 构建7z过滤参数数组（递归排除指定文件/目录）
 $xzFilterArgs = @()
@@ -139,13 +135,12 @@ Write-Host "===== 开始批量压缩子目录任务 =====" -ForegroundColor Cyan
 Write-Host "目标工作目录：$(Get-Location).Path" -ForegroundColor Gray
 if ([string]::IsNullOrEmpty($Password)) {
     Write-Host "压缩配置：每个子目录单独打包，无密码" -ForegroundColor Gray
-}
-else {
+} else {
     Write-Host "压缩配置：每个子目录单独打包，密码=已设置（隐藏显示）" -ForegroundColor Gray
 }
 Write-Host "压缩格式：.7z（采用 LZMA2 压缩算法，兼容常规压缩软件）" -ForegroundColor Gray
-Write-Host "子目录过滤：$($FILTER_FILES -join ' ')" -ForegroundColor Gray
-Write-Host "日期标识：$CURRENT_DATE（格式：年-月-日_时-分钟）" -ForegroundColor Gray
+Write-Host "子目录过滤：$($FILTER_FILES -join ' ')
+Write-Host "日期标识：使用各目录最后修改时间（格式：年-月-日_时-分钟）" -ForegroundColor Gray
 Write-Host "进度显示：启用实时百分比进度，压缩过程中可查看详细状态" -ForegroundColor Gray
 Write-Host "-----------------------------" -ForegroundColor Gray
 
@@ -153,7 +148,12 @@ Write-Host "-----------------------------" -ForegroundColor Gray
 $subDirs = Get-ChildItem -Path . -Directory -Depth 0 | Where-Object { $_.Name -ne "." }
 foreach ($dir in $subDirs) {
     $dirName = $dir.Name
-    $compressFile = "$dirName`_$CURRENT_DATE.7z"
+    
+    # 获取目录的最后修改时间并格式化
+    $dirModifyTime = $dir.LastWriteTime
+    $formattedTime = $dirModifyTime.ToString("yyyy-MM-dd_HH-mm")
+    
+    $compressFile = "$dirName`_$formattedTime.7z"
 
     # 跳过已存在的同名压缩包
     if (Test-Path -Path $compressFile -PathType Leaf) {
@@ -161,7 +161,7 @@ foreach ($dir in $subDirs) {
         continue
     }
 
-    Write-Host "正在压缩：$dirName → $compressFile（过滤 $($FILTER_FILES -join ' ')）" -ForegroundColor Blue
+    Write-Host "正在压缩：$dirName → $compressFile（过滤 $($FILTER_FILES -join ' ')
     Write-Host "-----------------------------" -ForegroundColor Gray
 
     # 构建7z核心参数
@@ -195,8 +195,7 @@ foreach ($dir in $subDirs) {
             if ($lastLine -match "\d+\s+\d+") {
                 $isArchiveEmpty = $false
             }
-        }
-        catch {
+        } catch {
             $isArchiveEmpty = $true
         }
 
@@ -207,8 +206,7 @@ foreach ($dir in $subDirs) {
         }
 
         Write-Host "✅ $compressFile 压缩成功（$(if ([string]::IsNullOrEmpty($Password)) { "无密码" } else { "密码：已设置，隐藏显示" })）" -ForegroundColor Green
-    }
-    else {
+    } else {
         Write-Host "❌ $compressFile 压缩失败，请检查目录权限或工具完整性" -ForegroundColor Red
         if (Test-Path -Path $compressFile -PathType Leaf) {
             Remove-Item -Path $compressFile -Force -ErrorAction SilentlyContinue
@@ -223,13 +221,18 @@ Write-Host "开始检查并打包当前目录文件（排除已压缩格式）..
 
 # 获取当前目录名（作为压缩包前缀）
 $currentDirName = (Get-Location).Path.Split("\")[-1]
-$filesPackage = "$currentDirName`_files_$CURRENT_DATE.7z"
+
+# 获取当前目录的最后修改时间
+$currentDirInfo = Get-Item -Path "."
+$currentDirModifyTime = $currentDirInfo.LastWriteTime
+$currentDirFormattedTime = $currentDirModifyTime.ToString("yyyy-MM-dd_HH-mm")
+
+$filesPackage = "$currentDirName`_files_$currentDirFormattedTime.7z"
 
 # 跳过已存在的文件包
 if (Test-Path -Path $filesPackage -PathType Leaf) {
     Write-Host "⚠️  已存在文件包 $filesPackage，跳过压缩" -ForegroundColor Yellow
-}
-else {
+} else {
     # 查找目标文件（排除已压缩格式）
     $targetFiles = @()
     $allFiles = Get-ChildItem -Path . -File -Depth 0
@@ -248,7 +251,7 @@ else {
 
     $fileCount = $targetFiles.Count
     if ($fileCount -gt 0) {
-        Write-Host "发现 $fileCount 个文件待打包（排除已压缩格式：$($CUR_PACKED_FORMATS -join ' ')）..." -ForegroundColor Gray
+        Write-Host "发现 $fileCount 个文件待打包（排除已压缩格式：$($CUR_PACKED_FORMATS -join ' ')
         Write-Host "正在打包文件：$filesPackage" -ForegroundColor Blue
         Write-Host "-----------------------------" -ForegroundColor Gray
 
@@ -285,8 +288,7 @@ else {
                     $isArchiveEmpty = $false
                     $isCompressSuccess = $true
                 }
-            }
-            catch {
+            } catch {
                 $isArchiveEmpty = $true
             }
         }
@@ -300,21 +302,21 @@ else {
                 default { "$_ Bytes" }
             }
             Write-Host "✅ $filesPackage 压缩成功（$(if ([string]::IsNullOrEmpty($Password)) { "无密码" } else { "密码：已设置，隐藏显示" })，大小：$packageSizeHuman）" -ForegroundColor Green
-        }
-        else {
+        } else {
             Write-Host "❌ $filesPackage 压缩失败或生成空包，已清理无效文件" -ForegroundColor Red
             Remove-Item -Path $filesPackage -Force -ErrorAction SilentlyContinue
         }
-    }
-    else {
-        Write-Host "当前目录下没有需要打包的文件（已排除压缩格式：$($CUR_PACKED_FORMATS -join ' ')）" -ForegroundColor Gray
+    } else {
+        Write-Host "当前目录下没有需要打包的文件（已排除压缩格式：$($CUR_PACKED_FORMATS -join ' ')
     }
 }
 
 # 任务结束统计（统计本次生成的压缩包）
 Write-Host "-----------------------------" -ForegroundColor Gray
 Write-Host "📊 本次任务生成压缩包统计：" -ForegroundColor Cyan
-$totalArchives = Get-ChildItem -Path . -File -Filter "*_$CURRENT_DATE.7z" -ErrorAction SilentlyContinue
+
+# 统计所有7z文件（因为现在使用的是不同时间戳）
+$totalArchives = Get-ChildItem -Path . -File -Filter "*.7z" -ErrorAction SilentlyContinue
 $totalCount = $totalArchives.Count
 $totalSize = ($totalArchives | Measure-Object -Property Length -Sum).Sum
 
