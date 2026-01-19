@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
 # 批量压缩工具（配套 batchun7z 解压工具）
+# Author: tekintian@gmail.com (https://dev.tekin.cn)
 # ===================== 使用说明 =====================
 # 用途：
 #   1. 将目标目录下的一级子目录批量压缩为 .7z 包
@@ -13,6 +14,7 @@
 #   batch7z                          # 压缩当前目录所有子目录和文件
 #   batch7z -d /path/to/dir          # 压缩指定目录
 #   batch7z -p 123456                # 设置压缩包密码
+#   batch7z --force                  # 强制重新打包（覆盖已存在的压缩包）
 #   batch7z -h                       # 显示帮助信息
 #
 # 使用实例：
@@ -23,7 +25,10 @@
 #   # 场景2：压缩指定目录并设置密码
 #   batch7z -d ~/Desktop/projects -p mypassword
 #
-#   # 场景3：压缩多个部署包，方便传输
+#   # 场景3：强制重新压缩（覆盖已存在的压缩包）
+#   batch7z --force -p newpassword
+#
+#   # 场景4：压缩多个部署包，方便传输
 #   cd /var/www/vhosts
 #   batch7z -p deploy2026
 #
@@ -56,10 +61,11 @@ show_help() {
     echo "  2. 打包当前目录下的非压缩包文件为 _files_ 日期格式的 .7z 包"
     echo "格式：batch7z [选项]..."
     echo ""
-    echo "可选短选项参数："
-    echo "  -d [目录路径]   ：指定目标压缩目录（默认：当前工作目录）"
-    echo "  -p [密码]       ：指定压缩包密码（默认：${DEFAULT_PASSWORD}）"
-    echo "  -h              ：显示此帮助信息并退出"
+    echo "可选参数："
+    echo "  -d, --directory [目录路径] ：指定目标压缩目录（默认：当前工作目录）"
+    echo "  -p, --password [密码]      ：指定压缩包密码（默认：${DEFAULT_PASSWORD}）"
+    echo "  -f, --force                ：强制重新打包（覆盖已存在的压缩包）"
+    echo "  -h, --help                 ：显示此帮助信息并退出"
     echo ""
     echo "配置说明："
     echo "  1. 压缩格式：.7z（兼容 BetterZip、WinRAR 等常规压缩软件）"
@@ -126,33 +132,33 @@ is_7z_archive_valid() {
 # 初始化参数
 TARGET_DIR="${DEFAULT_DIR}"
 COMPRESS_PASSWORD="${DEFAULT_PASSWORD}"
+FORCE_MODE=0
 
-# 核心：使用 getopts 解析短选项参数（-d、-p、-h）
-while getopts "d:p:h" opt; do
-    case "${opt}" in
-        d)
-            TARGET_DIR="${OPTARG}"
+# 手动解析命令行参数（支持长选项，跨平台兼容）
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -d|--directory)
+            TARGET_DIR="$2"
             if [ ! -d "${TARGET_DIR}" ]; then
-                echo "❌ 错误：-d 选项指定的目录 '${TARGET_DIR}' 不存在或无效！"
+                echo "❌ 错误：-d/--directory 选项指定的目录 '${TARGET_DIR}' 不存在或无效！"
                 exit 1
             fi
+            shift 2
             ;;
-        p)
-            COMPRESS_PASSWORD="${OPTARG}"
+        -p|--password)
+            COMPRESS_PASSWORD="$2"
+            shift 2
             ;;
-        h)
+        -f|--force)
+            FORCE_MODE=1
+            shift
+            ;;
+        -h|--help)
             show_help
             exit 0
             ;;
-        \?)
-            echo "❌ 错误：无效的选项 '-${OPTARG}'！"
-            echo ""
-            show_help
-            exit 1
-            ;;
-        :)
-            echo "❌ 错误：选项 '-${OPTARG}' 缺少必要参数！"
-            echo ""
+        *)
+            echo "❌ 错误：未知选项 '$1'！"
             show_help
             exit 1
             ;;
@@ -182,6 +188,11 @@ if [ -z "${COMPRESS_PASSWORD}" ]; then
 else
     echo "压缩配置：每个子目录单独打包，密码=已设置（隐藏显示）"
 fi
+if [ "${FORCE_MODE}" -eq 1 ]; then
+    echo "强制模式：已启用（覆盖已存在的压缩包）"
+else
+    echo "强制模式：未启用（跳过已存在的压缩包）"
+fi
 echo "压缩格式：.7z（采用 xz 压缩算法，兼容常规压缩软件）"
 echo "子目录过滤：${FILTER_FILES[*]}"
 echo "日期标识：${CURRENT_DATE}（格式：年-月-日_时-分钟-秒）"
@@ -199,17 +210,22 @@ find . -maxdepth 1 -type d -not -name . -print0 | while IFS= read -r -d '' dir; 
         formatted_time=$(/usr/bin/stat -f %Sm -t "${TIME_FORMAT}" "${dir}")
     else
         # Linux
-        raw_time=$(stat -c '%y' "${dir}")
-        formatted_time=$(date -d "${raw_time}" +"${TIME_FORMAT}")
+        raw_time=$(/usr/bin/stat -c '%y' "${dir}")
+        formatted_time=$(/bin/date -d "${raw_time}" +"${TIME_FORMAT}")
     fi
     
     # 定义压缩包文件名
     compress_file="${dir_name}_${formatted_time}.7z"
 
-    # 跳过已存在的同名压缩包
+    # 跳过已存在的同名压缩包（除非启用强制模式）
     if [ -f "${compress_file}" ]; then
-        echo "⚠️  已存在压缩包 ${compress_file}，跳过压缩"
-        continue
+        if [ "${FORCE_MODE}" -eq 1 ]; then
+            echo "🔄 强制模式：删除已存在的压缩包 ${compress_file}"
+            rm -f "${compress_file}"
+        else
+            echo "⚠️  已存在压缩包 ${compress_file}，跳过压缩"
+            continue
+        fi
     fi
 
     echo "正在压缩：${dir_name} → ${compress_file}（过滤 ${FILTER_FILES[*]}）"
@@ -250,44 +266,59 @@ current_dir_name=$(basename "$(pwd)")
 # 初始化变量（避免未定义）
 latest_file_mtime=""
 
+# find查找排除格式
+find_exclude_formats=("${CUR_PACKED_FORMATS[@]}")
+
+# 步骤 2：向副本数组动态追加内容（如 .DS_Store、.localized 等）
+# 语法：array+=("新增内容1" "新增内容2" ...)
+find_exclude_formats+=(".DS_Store" ".localized" "Thumbs.db")
+
+# 改用数组存储 find 排除参数（避免 eval 解析异常）
+find_exclude_opts=()
+
+# 遍历数组，构建 find 排除参数数组（每个 -not -name 作为独立元素）
+for format in "${find_exclude_formats[@]}"; do
+  find_exclude_opts+=(-not -name "$format")
+done
+
+# 跨平台逻辑
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # ========== macOS 环境（BSD 工具链） ==========
-    latest_file_mtime=$(find . -maxdepth 1 -type f -not -name "${CUR_PACKED_FORMATS}" -print0 2>/dev/null | \
-    xargs -0 /usr/bin/stat -f "%m %N" | \
+    # 直接传递 find_exclude_opts 数组，无需 eval，参数解析更稳健
+    latest_file_mtime=$(find . -maxdepth 1 -type f "${find_exclude_opts[@]}" -print0 2>/dev/null | \
+    xargs -0 -r /usr/bin/stat -f "%m %N" | \
     sort -rn | \
     head -n 1 | \
     while read -r ts file; do
       if [[ -n "$ts" && -n "$file" ]]; then
-        /usr/bin/stat -f "%Sm" -t "${TIME_FORMAT}" "$file"
+        /usr/bin/stat -f "%Sm" -t "$TIME_FORMAT" "$file"
       fi
     done)
 
     # 兜底逻辑：无符合条件文件时，使用当前目录修改时间
     if [[ -z "$latest_file_mtime" ]]; then
-      latest_file_mtime=$(/usr/bin/stat -f "%Sm" -t "${TIME_FORMAT}" ".")
+      echo "latest_file_mtime获取失败,使用兜底逻辑"
+      latest_file_mtime=$(/usr/bin/stat -f "%Sm" -t "$TIME_FORMAT" ".")
     fi
 
 else
     # ========== Linux 环境（GNU 工具链） ==========
-    latest_file_mtime=$(find . -maxdepth 1 -type f -not -name "${CUR_PACKED_FORMATS}" -print0 2>/dev/null | \
-    xargs -0 stat -c "%Y %n" | \
+    latest_file_mtime=$(find . -maxdepth 1 -type f "${find_exclude_opts[@]}" -print0 2>/dev/null | \
+    xargs -0 -r /usr/bin/stat -c "%Y %n" | \
     sort -rn | \
     head -n 1 | \
     while read -r ts file; do
       if [[ -n "$ts" && -n "$file" ]]; then
-        # GNU stat 直接格式化时间（无需 date 中转，避免时间戳限制）
-        stat -c "%y" "$file" | awk -v fmt="${TIME_FORMAT}" '{
-            split($1, d, "-"); split($2, t, ":");
-            printf "%s_%s-%s-%s\n", d[1]"-"d[2]"-"d[3], t[1], t[2], substr(t[3], 1, 2)
+        /usr/bin/stat -c "%y" "$file" | awk -v fmt="$TIME_FORMAT" '{
+            printf "%s_%02d-%02d-%02d\n", $1, substr($2,1,2), substr($2,4,2), substr($2,7,2)
         }'
       fi
     done)
 
     # 兜底逻辑：无符合条件文件时，使用当前目录修改时间
     if [[ -z "$latest_file_mtime" ]]; then
-      latest_file_mtime=$(stat -c "%y" "." | awk -v fmt="${TIME_FORMAT}" '{
-          split($1, d, "-"); split($2, t, ":");
-          printf "%s_%s-%s-%s\n", d[1]"-"d[2]"-"d[3], t[1], t[2], substr(t[3], 1, 2)
+      latest_file_mtime=$(/usr/bin/stat -c "%y" "." | awk -v fmt="$TIME_FORMAT" '{
+          printf "%s_%02d-%02d-%02d\n", $1, substr($2,1,2), substr($2,4,2), substr($2,7,2)
       }')
     fi
 fi
@@ -295,10 +326,20 @@ fi
 # 定义文件包文件名
 files_package="${current_dir_name}_files_${latest_file_mtime}.7z"
 
-# 跳过已存在的文件包
+# 跳过已存在的文件包（除非启用强制模式）
 if [ -f "${files_package}" ]; then
-    echo "⚠️  已存在文件包 ${files_package}，跳过压缩"
-else
+    if [ "${FORCE_MODE}" -eq 1 ]; then
+        echo "🔄 强制模式：删除已存在的文件包 ${files_package}"
+        rm -f "${files_package}"
+    else
+        echo "⚠️  已存在文件包 ${files_package}，跳过压缩"
+        # 跳过文件包压缩，继续执行后续统计
+        SKIP_FILES_PACKAGE=1
+    fi
+fi
+
+# 如果没有跳过文件包压缩，则执行打包逻辑
+if [ "${SKIP_FILES_PACKAGE:-0}" -ne 1 ]; then
     # 构建find排除参数数组（无eval，原生安全，去掉多余双引号）
     # 默认排除  .DS_Store Thumb.db 文件
     find_exclude_args=(! -iname ".DS_Store" ! -iname "Thumb.db")
@@ -351,14 +392,59 @@ fi
 
 # 任务结束统计（兼容特殊文件名，统计准确）
 echo "-----------------------------"
-echo "📊 本次任务生成压缩包统计："
+echo "📊 当前文件夹7z压缩包统计："
 # 用find统计，兼容特殊文件名
 # 统计所有以当前目录名开头的7z文件，因为现在使用的是不同时间戳
 total_count=$(find . -maxdepth 1 -type f -name "*.7z" 2>/dev/null | wc -l)
 # 计算总大小并人性化显示
-total_size=$(find . -maxdepth 1 -type f -name "*.7z" -exec du -sb {} + 2>/dev/null | awk '{sum+=$1} END {print sum}')
-total_size_human=$(numfmt --to=iec --suffix=B "${total_size}" 2>/dev/null || echo "0B")
+# 计算总大小（跨平台兼容方案）
+total_size=0
+while IFS= read -r file; do
+    if [[ -n "$file" ]]; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS: 使用 stat -f "%z" 获取文件大小（字节）
+            size=$(/usr/bin/stat -f "%z" "$file" 2>/dev/null || echo 0)
+        else
+            # Linux: 使用 stat -c "%s" 获取文件大小（字节）
+            size=$(/usr/bin/stat -c "%s" "$file" 2>/dev/null || echo 0)
+        fi
+        total_size=$((total_size + size))
+    fi
+done < <(find . -maxdepth 1 -type f -name "*.7z" 2>/dev/null)
+# 人性化显示函数（不使用 numfmt，完全跨平台）
+format_human_readable() {
+    local bytes=$1
+    local unit
+    local value
+    
+    if (( bytes == 0 )); then
+        echo "0B"
+        return
+    fi
+    
+    if (( bytes < 1024 )); then
+        echo "${bytes}B"
+    elif (( bytes < 1048576 )); then
+        unit="KB"
+        value=$(awk "BEGIN {printf \"%.1f\", ${bytes} / 1024}")
+        echo "${value}${unit}"
+    elif (( bytes < 1073741824 )); then
+        unit="MB"
+        value=$(awk "BEGIN {printf \"%.1f\", ${bytes} / 1048576}")
+        echo "${value}${unit}"
+    elif (( bytes < 1099511627776 )); then
+        unit="GB"
+        value=$(awk "BEGIN {printf \"%.1f\", ${bytes} / 1073741824}")
+        echo "${value}${unit}"
+    else
+        unit="TB"
+        value=$(awk "BEGIN {printf \"%.1f\", ${bytes} / 1099511627776}")
+        echo "${value}${unit}"
+    fi
+}
+
+total_size_human=$(format_human_readable $total_size)
 echo "  总数量：${total_count} 个"
-echo "  总大小：${total_size_human}（人性化显示）"
+echo "  总大小：${total_size_human}（${total_size} 字节）"
 echo "-----------------------------"
 echo "===== 批量压缩子目录任务执行完毕 ====="
