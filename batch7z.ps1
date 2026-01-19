@@ -5,11 +5,14 @@
 1. 批量压缩目标目录下的一级子目录为独立.7z包（带日期后缀，使用目录最后修改时间）
 2. 打包目录下非压缩格式零散文件为统一_files_日期后缀.7z包（使用目录最后修改时间）
 3. 支持密码保护、实时进度显示、智能过滤无用文件/目录
-4. 自动校验7z环境、清理空压缩包、生成任务统计报告
+4. 支持强制重新压缩（覆盖已存在的压缩包）
+5. 自动校验7z环境、清理空压缩包、生成任务统计报告
 .PARAMETER TargetDir
 指定目标压缩目录（可选，默认：当前工作目录）
 .PARAMETER Password
 指定压缩包密码（可选，默认：空）
+.PARAMETER Force
+强制重新压缩（可选，覆盖已存在的压缩包）
 .PARAMETER Help
 显示帮助信息（可选）
 .EXAMPLE
@@ -57,6 +60,7 @@ function Show-Help {
     Write-Host "参数说明："
     Write-Host "  -TargetDir [目录路径] ：指定目标压缩目录（默认：当前工作目录）"
     Write-Host "  -Password [密码]       ：指定压缩包密码（默认：$DEFAULT_PASSWORD）"
+    Write-Host "  -Force                 ：强制重新压缩（覆盖已存在的压缩包）"
     Write-Host "  -Help                  ：显示此帮助信息并退出"
     Write-Host ""
     Write-Host "配置说明："
@@ -96,6 +100,9 @@ param (
 
     [Parameter(Mandatory = $false)]
     [string]$Password = $DEFAULT_PASSWORD,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Force,
 
     [Parameter(Mandatory = $false)]
     [switch]$Help
@@ -138,6 +145,11 @@ if ([string]::IsNullOrEmpty($Password)) {
 } else {
     Write-Host "压缩配置：每个子目录单独打包，密码=已设置（隐藏显示）" -ForegroundColor Gray
 }
+if ($Force) {
+    Write-Host "强制模式：已启用（覆盖已存在的压缩包）" -ForegroundColor Yellow
+} else {
+    Write-Host "强制模式：未启用（跳过已存在的压缩包）" -ForegroundColor Gray
+}
 Write-Host "压缩格式：.7z（采用 LZMA2 压缩算法，兼容常规压缩软件）" -ForegroundColor Gray
 Write-Host "子目录过滤：$($FILTER_FILES -join ' ')
 Write-Host "日期标识：使用各目录最后修改时间（格式：年-月-日_时-分钟）" -ForegroundColor Gray
@@ -155,10 +167,15 @@ foreach ($dir in $subDirs) {
     
     $compressFile = "$dirName`_$formattedTime.7z"
 
-    # 跳过已存在的同名压缩包
+    # 跳过已存在的同名压缩包（除非启用强制模式）
     if (Test-Path -Path $compressFile -PathType Leaf) {
-        Write-Host "⚠️  已存在压缩包 $compressFile，跳过压缩" -ForegroundColor Yellow
-        continue
+        if ($Force) {
+            Write-Host "🔄 强制模式：删除已存在的压缩包 $compressFile" -ForegroundColor Yellow
+            Remove-Item -Path $compressFile -Force -ErrorAction SilentlyContinue
+        } else {
+            Write-Host "⚠️  已存在压缩包 $compressFile，跳过压缩" -ForegroundColor Yellow
+            continue
+        }
     }
 
     Write-Host "正在压缩：$dirName → $compressFile（过滤 $($FILTER_FILES -join ' ')
@@ -229,10 +246,19 @@ $currentDirFormattedTime = $currentDirModifyTime.ToString("yyyy-MM-dd_HH-mm")
 
 $filesPackage = "$currentDirName`_files_$currentDirFormattedTime.7z"
 
-# 跳过已存在的文件包
+# 跳过已存在的文件包（除非启用强制模式）
+$skipFilesPackage = $false
 if (Test-Path -Path $filesPackage -PathType Leaf) {
-    Write-Host "⚠️  已存在文件包 $filesPackage，跳过压缩" -ForegroundColor Yellow
-} else {
+    if ($Force) {
+        Write-Host "🔄 强制模式：删除已存在的文件包 $filesPackage" -ForegroundColor Yellow
+        Remove-Item -Path $filesPackage -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Host "⚠️  已存在文件包 $filesPackage，跳过压缩" -ForegroundColor Yellow
+        $skipFilesPackage = $true
+    }
+}
+
+if (-not $skipFilesPackage) {
     # 查找目标文件（排除已压缩格式）
     $targetFiles = @()
     $allFiles = Get-ChildItem -Path . -File -Depth 0

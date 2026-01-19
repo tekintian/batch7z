@@ -118,6 +118,7 @@ pwsh -File ./batchun7z.ps1 -d "/path/to/restore"
 batch7z                          # 压缩当前目录所有子目录
 batch7z -d /path/to/dir          # 压缩指定目录
 batch7z -p 123456                # 使用自定义密码
+batch7z -f                       # 强制重新压缩（覆盖已存在的压缩包）
 batch7z -h                       # 显示帮助信息
 ```
 
@@ -134,7 +135,14 @@ batch7z
 batch7z -d ~/Desktop/projects -p mypassword
 ```
 
-3. 压缩多个部署包，方便传输：
+3. 强制重新压缩（覆盖已存在的压缩包）：
+```bash
+batch7z --force                  # 使用长选项方式
+# 或
+batch7z -f                       # 使用短选项方式
+```
+
+4. 压缩多个部署包，方便传输：
 ```bash
 cd /var/www/vhosts
 batch7z -p deploy2026
@@ -149,6 +157,7 @@ batch7z -p deploy2026
   - 子目录：`子目录名_YYYY-MM-DD_HH-MM.7z`
   - 文件：`当前目录名_files_YYYY-MM-DD_HH-MM.7z`
 - 默认密码：不设置密码（可选设置）
+- 强制模式：默认跳过已存在的压缩包，使用 `-f` 或 `--force` 可强制覆盖
 
 ---
 

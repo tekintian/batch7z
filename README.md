@@ -118,6 +118,7 @@ Batch compress first-level subdirectories under the target directory into .7z ar
 batch7z                          # Compress all subdirectories in current directory
 batch7z -d /path/to/dir          # Compress specified directory
 batch7z -p 123456                # Use custom password
+batch7z -f                       # Force re-compression (overwrite existing archives)
 batch7z -h                       # Show help information
 ```
 
@@ -134,7 +135,14 @@ batch7z
 batch7z -d ~/Desktop/projects -p mypassword
 ```
 
-3. Compress multiple deployment packages for easy transfer:
+3. Force re-compression (overwrite existing archives):
+```bash
+batch7z --force                  # Using long option
+# or
+batch7z -f                       # Using short option
+```
+
+4. Compress multiple deployment packages for easy transfer:
 ```bash
 cd /var/www/vhosts
 batch7z -p deploy2026
@@ -149,6 +157,7 @@ batch7z -p deploy2026
   - Subdirectories: `subdirectory_name_YYYY-MM-DD_HH-MM.7z`
   - Files: `current_directory_name_files_YYYY-MM-DD_HH-MM.7z`
 - Default password: No password (optional to set)
+- Force mode: Skip existing archives by default, use `-f` or `--force` to force overwrite
 
 ---
 
